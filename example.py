@@ -65,9 +65,12 @@ class TestSpi:
             return self.state
         return rv
 
-
-
-logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+log_format = "%(asctime)s %(levelname)s %(module)s - %(funcName)s: %(message)s"
+date_format = "%H:%M:%S"
+logging.basicConfig(stream=sys.stdout, 
+                    level=logging.DEBUG,
+                    format=log_format, 
+                    datefmt=date_format)
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +126,7 @@ def main():
     radio.set_pa_level_max_index(0)
 
     rcvr = Receiver(spirit, irq)
+    rcvr.log_times = True
     rcvr.set_persistent_rx(True)
     rcvr.buffer_limit = pkt_count
 

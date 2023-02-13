@@ -1,7 +1,5 @@
 import logging
 
-from threading import Thread
-
 from . import Spirit1
 from .irq import SpiritIrq, debug_irq_status, IRQ
 from .registers import Spirit1Registers
@@ -15,6 +13,7 @@ class Receiver:
         self.irq = irq
         self.should_run:bool = True
         self.debug:bool = False
+        self.log_times:bool = False
         self.buffers:list[bytearray] = []
         self.buffer_limit:int = 0
 
@@ -55,11 +54,14 @@ class Receiver:
                 fifo_sz = self.spirit.linear_fifo_rx_size()
                 if fifo_sz > 0:
                     buffer += self.spirit.read_linear_fifo(fifo_sz)
+
                 if self.debug:
                     mtxt = ""
                     for m in buffer:
                         mtxt += f"{m:02x} "
                     logger.debug(mtxt)
+                if self.log_times:
+                    logger.debug("messsage of %d bytes", len(buffer))
                 
                 self.buffers.append(buffer)
                 if self.buffer_limit > 0 and len(self.buffers) >= self.buffer_limit:

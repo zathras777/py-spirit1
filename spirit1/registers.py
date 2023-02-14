@@ -80,6 +80,7 @@ class Spirit1Registers(IntEnum):
     LINK_QUALIF_2 = 0xC5
     LINK_QUALIF_1 = 0xC6
     LINK_QUALIF_0 = 0xC7
+    RSSI_LEVEL = 0xC8
     RX_PKT_LEN_HI = 0xC9
     RX_PKT_LEN_LO = 0xCA
     RCO_VCO_CALIBR_OUT0 = 0xE5    # RCO/VCO Calibration output

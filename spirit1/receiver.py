@@ -61,7 +61,9 @@ class Receiver:
                         mtxt += f"{m:02x} "
                     logger.debug(mtxt)
                 if self.log_times:
-                    logger.debug("messsage of %d bytes", len(buffer))
+                    sqi = self.spirit.read_registers(Spirit1Registers.LINK_QUALIF_1)[0] & 0x7F
+                    rssi = self.spirit.read_registers(Spirit1Registers.RSSI_LEVEL)[0]
+                    logger.debug("messsage of %d bytes, SQI %d, RSSI %d", len(buffer), sqi, rssi)
                 
                 self.buffers.append(buffer)
                 if self.buffer_limit > 0 and len(self.buffers) >= self.buffer_limit:

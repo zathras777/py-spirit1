@@ -25,7 +25,7 @@ class Radio:
         'modulation': Spirit1Modulation.GFSK_BT1,
         'datarate': 50000,
         'freq_deviation': int(20e3),
-        'bandwidth': 100.5e3,
+        'bandwidth': int(100e3),
     }
 
     def __init__(self, spirit:Spirit1):
@@ -259,6 +259,10 @@ class Radio:
         if self.freq_deviation - bp < b - self.freq_deviation:
             pcm -= 1
         self.spirit.update_register(Spirit1Registers.FDEV0, 0xF8, (pcm & 0x07))
+
+    def set_bandwidth(self, bandwidth:int):
+        self.set_bandwidth = bandwidth
+        self.write_channel_bandwidth_me()
 
     def write_channel_bandwidth_me(self):
         dig_divider = 1 if self.digital_divider else 2

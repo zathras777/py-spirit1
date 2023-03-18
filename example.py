@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import sys
 
@@ -74,7 +75,7 @@ logging.basicConfig(stream=sys.stdout,
 
 logger = logging.getLogger(__name__)
 
-def main():
+async def main():
     pkt_count = int(sys.argv[1]) if len(sys.argv) > 1 else 30
 
     if USE_SPIDEV:
@@ -92,7 +93,7 @@ def main():
 
     radio.set_xtal_frequency(50e6)
     radio.set_datarate(50000)
-    radio.set_modulation_scheme(Spirit1Modulation.GFSK_BT1)
+    radio.set_modulation_scheme(Spirit1Modulation.GFSK_BT05)
     radio.init_device()
     radio.set_frequency_base(868.2e6)
 
@@ -102,8 +103,11 @@ def main():
     pkt.sync_words = [0x5a, 0x47, 0x52, 0x50]
     pkt.fixed_length = False
     pkt.fixed_packet_length = 100
-    pkt.crc_mode = CrcMode.CRC_MODE_OFF
-    pkt.data_whitening = False
+    pkt.crc_mode = CrcMode.CRC_MODE_864CBF
+    pkt.control_length = 4
+    pkt.address_field = True
+    pkt.fec = True
+    pkt.data_whitening = True
     pkt.init()
 
     irq = IRQ(spirit)
@@ -129,20 +133,25 @@ def main():
     rcvr.log_times = True
     rcvr.set_persistent_rx(True)
     rcvr.buffer_limit = pkt_count
+    rcvr.callback = pkt.get_message
 
     print(f"Trying to receive {pkt_count} messages.")
-    if not rcvr.receive():
-        print("Unable to receive packets. Exiting...")
-        exit()
-    
-    print(f"\nReceived a total of {len(rcvr.buffers)} messages.")
-    for i, msg in enumerate(rcvr.buffers):
-        print(f"{i + 1:2d}: ", end='')
-        for m in msg:
-            print(f"{m:02x} ", end='')
-        print()
-        
+    received:int = 0
+
+    async for nxt in rcvr.receive():
+        if nxt in [True, False]:
+            break
+        print(nxt.info())
+        received += 1
+        if received >= pkt_count:
+            break
 
 
 if __name__ == '__main__':
-    main()
+    loop = asyncio.get_event_loop()
+
+    try:
+        loop.run_until_complete(main())
+    except KeyboardInterrupt:
+        loop.stop()
+        pass

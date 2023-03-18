@@ -80,9 +80,19 @@ class Spirit1Registers(IntEnum):
     LINK_QUALIF_2 = 0xC5
     LINK_QUALIF_1 = 0xC6
     LINK_QUALIF_0 = 0xC7
-    RSSI_LEVEL = 0xC8
+    RSSI_LEVEL = 0xC8             # RSSI of received packet
+
     RX_PKT_LEN_HI = 0xC9
     RX_PKT_LEN_LO = 0xCA
+
+    RX_CTRL_FIELD_3 = 0xCE        # RX Control Data Byte 0
+    RX_CTRL_FIELD_2 = 0xCF        # RX Control Data Byte 1
+    RX_CTRL_FIELD_1 = 0xD0        # RX Control Data Byte 2
+    RX_CTRL_FIELD_0 = 0xD1        # RX Control Data Byte 3
+
+    RX_ADDRESS_1 = 0xD2           # RX Source Address
+    RX_ADDRESS_0 = 0xD3           # RX Destination Address
+
     RCO_VCO_CALIBR_OUT0 = 0xE5    # RCO/VCO Calibration output
     LINEAR_FIFO_STATUS_1 = 0xE6
     LINEAR_FIFO_STATUS_0 = 0xE7

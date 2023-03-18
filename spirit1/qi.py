@@ -1,6 +1,5 @@
 import logging
 
-
 from . import Spirit1
 from .registers import Spirit1Registers
 
@@ -15,10 +14,6 @@ class QI:
             logger.warning("Invalid SQI Threshold value passed. Must be between 0 and 3.")
             return
         self.spirit.update_register(Spirit1Registers.QI, 0x3F, thresh << 6)
-
-#        sqi = self.read_registers(0x3A)[0]
-#        sqi = (sqi & 0x1F) + thresh.value
-#        self.write_registers(0x3A, sqi)
 
     def sqi_enable(self, onoff:bool):
         self.spirit.set_register_bit(Spirit1Registers.QI, 1, onoff)

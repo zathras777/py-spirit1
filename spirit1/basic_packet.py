@@ -1,12 +1,40 @@
 import logging
 
-from typing import List
+from typing import List, Optional
 
 from . import Spirit1
 from .constants import CrcMode
 from .registers import Spirit1Registers
+from .receiver import ReceivedMessage
 
 logger = logging.getLogger(__name__)
+
+
+class BasicPacketMessage:
+    def __init__(self, base:ReceivedMessage, addr:Optional[int], ctrl_data:Optional[list[int]]):
+        self.address = addr
+        self.ctrl_data = ctrl_data
+        self.payload = base.payload
+        self.rssi = base.rssi
+        self.sqi = base.sqi
+        self.pqi = base.pqi
+        self.agc_word = base.agc_word
+
+    def __repr__(self) -> str:
+        return f"Basic Packet Message: {len(self.payload)} bytes"
+
+    def info(self, inc_quality:bool=True) -> str:
+        info_str = "Message: \n"
+        if self.address is not None:
+            info_str += f"  From Address: 0x{self.address:02x}\n"
+        if self.ctrl_data is not None and len(self.ctrl_data) > 0:
+            ctrl = " ".join(f"{x:02x}" for x in self.ctrl_data)
+            info_str += f"  Control Data: {ctrl}\n"
+        if inc_quality:
+            info_str += f"  RSSI: {self.rssi}  SQI: {self.sqi}  PQI: {self.pqi}  AGC_WORD: {self.agc_word}\n"
+        pl = " ".join([f"{x:02x}" for x in self.payload])
+        info_str += f"  Payload: {pl}\n"
+        return info_str
 
 
 class BasicPacketAddress:
@@ -126,6 +154,14 @@ class BasicPacket:
         oversize = 1 if self.address_field else 0
         # add control length to oversize...
 
-        vals = self.spirit.read_registers(Spirit1Registers.RX_PKT_LEN_HI, Spirit1Registers.RX_PKT_LEN_LO)
+        vals = self.spirit.read_n_registers(Spirit1Registers.RX_PKT_LEN_HI, 2)
         return ((vals[0] << 8) + vals[1]) - oversize
 
+    def get_message(self, base:ReceivedMessage) -> BasicPacketMessage:
+        addr:int|None = None
+        ctrl_data:list[int]|None = None
+        if self.address_field:
+            addr = self.spirit.read_registers(Spirit1Registers.RX_ADDRESS_0)[0]
+        if self.control_length > 0:
+            ctrl_data = list(self.spirit.read_n_registers(Spirit1Registers.RX_CTRL_FIELD_3, self.control_length))
+        return BasicPacketMessage(base, addr, ctrl_data)

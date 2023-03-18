@@ -64,6 +64,10 @@ class Spirit1:
         regs:tuple[int] = (0x01,) + tuple(a.value for a in args) + (0x00,)
         return self._spi_xfer(*regs)
 
+    def read_n_registers(self, start:Spirit1Registers, n:int) -> bytearray:
+        regs:tuple[int] = (0x01, start) + tuple(0x0 for x in range(n))
+        return self._spi_xfer(*regs)
+
     def write_registers(self, start_register:Spirit1Registers, *args:int) -> bytearray:
         regs = [0x00, start_register.value] + list(args)
         vals = self._spi_xfer(*regs)
@@ -103,6 +107,9 @@ class Spirit1:
 
     def linear_fifo_rx_size(self) -> int:
         return self.read_registers(Spirit1Registers.LINEAR_FIFO_STATUS_0)[0] & 0x7F
+
+    def linear_fifo_tx_size(self) -> int:
+        return self.read_registers(Spirit1Registers.LINEAR_FIFO_STATUS_1)[0] & 0x7F
 
     # Internal functions...
     def _spi_xfer(self, *args:int) -> bytearray:

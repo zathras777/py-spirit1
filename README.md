@@ -24,6 +24,19 @@ radio.init_device()
 
 ```
 
+```shell
+$ python3 ./example.py
+DEBUG:asyncio:Using selector: EpollSelector
+Trying to receive 10 messages.
+Message: 
+  From Address: 0xff
+  Control Data: fc 00 1f 06
+  RSSI: 112  SQI: 32  PQI: 34  AGC_WORD: 8
+  Payload: 05 ff 00 54 8d 52 1a e0 dd bd d7 fb 49 3d 23 5c 7d 4b 43
+
+```
+
+
 ## Background
 This project has been written to allow me to use the chip in order to control some heaters remotely. The RF controllers for these heaters use the SPIRIT1 internally, so using the same chip allows me to investigate the protocol and then hopefully emulate it.
 

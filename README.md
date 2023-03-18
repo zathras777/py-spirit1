@@ -25,14 +25,15 @@ radio.init_device()
 ```
 
 ```shell
-$ python3 ./example.py
-DEBUG:asyncio:Using selector: EpollSelector
+$ python ./example.py 10
+01:59:01 DEBUG selector_events - __init__: Using selector: EpollSelector
 Trying to receive 10 messages.
 Message: 
   From Address: 0xff
-  Control Data: fc 00 1f 06
-  RSSI: 112  SQI: 32  PQI: 34  AGC_WORD: 8
-  Payload: 05 ff 00 54 8d 52 1a e0 dd bd d7 fb 49 3d 23 5c 7d 4b 43
+  Control Data: c6 00 07 06
+  CRC Data:     d6 8e c1
+  RSSI: 97  SQI: 32  PQI: 12  AGC_WORD: 8
+  Payload: 05 ff 00 5c 03 e1 40 85 82 6b 80 3e fd 9b 6f 52 7d 28 38
 
 ```
 

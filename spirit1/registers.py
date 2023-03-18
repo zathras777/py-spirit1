@@ -85,6 +85,10 @@ class Spirit1Registers(IntEnum):
     RX_PKT_LEN_HI = 0xC9
     RX_PKT_LEN_LO = 0xCA
 
+    CRC_FIELD_2 = 0xCB            # CRC Field of received packet, byte 2
+    CRC_FIELD_1 = 0xCC            # CRC Field of received packet, byte 1
+    CRC_FIELD_0 = 0xCD            # CRC Field of received packet, byte 0
+
     RX_CTRL_FIELD_3 = 0xCE        # RX Control Data Byte 0
     RX_CTRL_FIELD_2 = 0xCF        # RX Control Data Byte 1
     RX_CTRL_FIELD_1 = 0xD0        # RX Control Data Byte 2

@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class BasicPacketMessage:
-    def __init__(self, base:ReceivedMessage, addr:Optional[int], ctrl_data:Optional[list[int]]):
+    def __init__(self, base:ReceivedMessage, addr:Optional[int], ctrl_data:Optional[list[int]], crc:Optional[list[int]]):
         self.address = addr
         self.ctrl_data = ctrl_data
         self.payload = base.payload
@@ -19,6 +19,7 @@ class BasicPacketMessage:
         self.sqi = base.sqi
         self.pqi = base.pqi
         self.agc_word = base.agc_word
+        self.crc_fields = crc
 
     def __repr__(self) -> str:
         return f"Basic Packet Message: {len(self.payload)} bytes"
@@ -30,6 +31,9 @@ class BasicPacketMessage:
         if self.ctrl_data is not None and len(self.ctrl_data) > 0:
             ctrl = " ".join(f"{x:02x}" for x in self.ctrl_data)
             info_str += f"  Control Data: {ctrl}\n"
+        if self.crc_fields is not None and len(self.crc_fields) > 0:
+            crc = " ".join(f"{x:02x}" for x in self.crc_fields)
+            info_str += f"  CRC Data:     {crc}\n"
         if inc_quality:
             info_str += f"  RSSI: {self.rssi}  SQI: {self.sqi}  PQI: {self.pqi}  AGC_WORD: {self.agc_word}\n"
         pl = " ".join([f"{x:02x}" for x in self.payload])
@@ -158,10 +162,19 @@ class BasicPacket:
         return ((vals[0] << 8) + vals[1]) - oversize
 
     def get_message(self, base:ReceivedMessage) -> BasicPacketMessage:
-        addr:int|None = None
-        ctrl_data:list[int]|None = None
+        addr:Optional[int] = None
+        ctrl_data:Optional[list[int]] = None
+        crc:Optional[list[int]] = None
+
         if self.address_field:
             addr = self.spirit.read_registers(Spirit1Registers.RX_ADDRESS_0)[0]
         if self.control_length > 0:
             ctrl_data = list(self.spirit.read_n_registers(Spirit1Registers.RX_CTRL_FIELD_3, self.control_length))
-        return BasicPacketMessage(base, addr, ctrl_data)
+        if self.crc_mode != CrcMode.CRC_MODE_OFF:
+            crclen = 1
+            if self.crc_mode in [CrcMode.CRC_MODE_8005, CrcMode.CRC_MODE_1021]:
+                crclen = 2
+            elif self.crc_mode == CrcMode.CRC_MODE_864CBF:
+                crclen = 3
+            crc = list(self.spirit.read_n_registers(Spirit1Registers.CRC_FIELD_2, crclen))
+        return BasicPacketMessage(base, addr, ctrl_data, crc)

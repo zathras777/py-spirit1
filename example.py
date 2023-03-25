@@ -3,9 +3,10 @@ import logging
 import sys
 
 from typing import List, Tuple
+from Crypto.Cipher import AES
 
 from spirit1 import Spirit1
-from spirit1.basic_packet import BasicPacket
+from spirit1.basic_packet import BasicPacket, BasicPacketMessage
 from spirit1.constants import CrcMode, Spirit1Modulation
 from spirit1.receiver import Receiver
 from spirit1.irq import IRQ, SpiritIrq
@@ -75,8 +76,13 @@ logging.basicConfig(stream=sys.stdout,
 
 logger = logging.getLogger(__name__)
 
+
+DEFAULT_KEY = bytes([0x30, 0x18, 0x8C, 0xC6, 0xD9, 0xEC, 0xF6, 0xFB, 0xE7, 0xF3, 0xF9, 0xFC, 0xC1, 0x60, 0xB0, 0xD8])
+
+
 async def main():
     pkt_count = int(sys.argv[1]) if len(sys.argv) > 1 else 30
+    cipher = AES.new(DEFAULT_KEY, AES.MODE_ECB)
 
     if USE_SPIDEV:
         spi = spidev.SpiDev()
@@ -141,7 +147,13 @@ async def main():
     async for nxt in rcvr.receive():
         if nxt in [True, False]:
             break
-        print(nxt.info())
+
+        if (len(nxt.payload) - 3) % 16 == 0:
+            decoded_str = " ".join([f"{x:02x}" for x in cipher.decrypt(nxt.payload[3:])])
+            print(f"{nxt.one_line()} => {decoded_str}")
+        else:
+            print(nxt.one_line())
+
         received += 1
         if received >= pkt_count:
             break

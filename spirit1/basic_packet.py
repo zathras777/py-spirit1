@@ -40,6 +40,16 @@ class BasicPacketMessage:
         info_str += f"  Payload: {pl}\n"
         return info_str
 
+    def one_line(self) -> str:
+        one_line = ""
+        if self.address is not None:
+            one_line += f"{self.address:02x} "
+        if self.ctrl_data is not None and len(self.ctrl_data) > 0:
+            ctrl = " ".join(f"{x:02x}" for x in self.ctrl_data)
+            one_line += f"{ctrl} "
+        pl = " ".join([f"{x:02x}" for x in self.payload])
+        return one_line + pl
+
 
 class BasicPacketAddress:
     def __init__(self):

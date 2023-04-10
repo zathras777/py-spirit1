@@ -46,6 +46,10 @@ class Spirit1Registers(IntEnum):
     SYNC_2 = 0x38
     SYNC_1 = 0x39
     QI = 0x3A                     # SQI & PQI
+
+    RX_SOURCE_ADDR = 0x4B
+    TX_SOURCE_ADDR = 0x4E
+
     PKTFLT_OPTS = 0x4F
     PROTOCOL_2 = 0x50
     PROTOCOL_1 = 0x51
@@ -57,6 +61,16 @@ class Spirit1Registers(IntEnum):
     TIMERS_1 = 0x57
     TIMERS_0 = 0x58
 
+    CSMA_CONFIG_3 = 0x64
+    CSMA_CONFIG_2 = 0x65
+    CSMA_CONFIG_1 = 0x66
+    CSMA_CONFIG_0 = 0x67
+
+    TX_CTRL_3 = 0x68
+    TX_CTRL_2 = 0x69
+    TX_CTRL_1 = 0x6A
+    TX_CTRL_0 = 0x6B
+
     CHANNEL_NUMBER = 0x6C         # Channel number
     RCO_VCO_CALIBR_IN1 = 0x6E     # VCO Tx calibration input
     RCO_VCO_CALIBR_IN0 = 0x6F     # VCO Rx calibration input
@@ -65,18 +79,19 @@ class Spirit1Registers(IntEnum):
     IRQ_MASK_2 = 0x91
     IRQ_MASK_1 = 0x92
     IRQ_MASK_0 = 0x93
-
     IQC_1 = 0x99                  # Undocumented
     IQC_0 = 0x9A                  # Undocumented
-
     SYNTH_CONFIG_HI = 0x9E
     SYNTH_CONFIG_LO = 0x9F
+
     VCO_CONFIG = 0xA1             # VCO Configuration
     DEM_CONFIG = 0xA3
     PM_CONFIG_2 = 0xA4
     PM_CONFIG_1 = 0xA5
     PM_CONFIG_0 = 0xA6
+
     XO_RCO_TEST = 0xB4
+
     LINK_QUALIF_2 = 0xC5
     LINK_QUALIF_1 = 0xC6
     LINK_QUALIF_0 = 0xC7

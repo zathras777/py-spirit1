@@ -3,7 +3,6 @@ import logging
 import sys
 
 from typing import List, Tuple
-from Crypto.Cipher import AES
 
 from spirit1 import Spirit1
 from spirit1.basic_packet import BasicPacket, BasicPacketMessage
@@ -77,12 +76,8 @@ logging.basicConfig(stream=sys.stdout,
 logger = logging.getLogger(__name__)
 
 
-DEFAULT_KEY = bytes([0x30, 0x18, 0x8C, 0xC6, 0xD9, 0xEC, 0xF6, 0xFB, 0xE7, 0xF3, 0xF9, 0xFC, 0xC1, 0x60, 0xB0, 0xD8])
-
-
 async def main():
     pkt_count = int(sys.argv[1]) if len(sys.argv) > 1 else 30
-    cipher = AES.new(DEFAULT_KEY, AES.MODE_ECB)
 
     if USE_SPIDEV:
         spi = spidev.SpiDev()
@@ -97,11 +92,11 @@ async def main():
     spirit.reset()
     radio = Radio(spirit)
 
-    radio.set_xtal_frequency(50e6)
+    radio.set_xtal_frequency(int(50e6))
     radio.set_datarate(50000)
     radio.set_modulation_scheme(Spirit1Modulation.GFSK_BT05)
     radio.init_device()
-    radio.set_frequency_base(868.2e6)
+    radio.set_frequency_base(int(868.2e6))
 
     pkt = BasicPacket(spirit)
     pkt.preamble_length = 5
@@ -128,7 +123,7 @@ async def main():
     qi.pqi_set_threshold(0)
     qi.pqi_enable(True)
 
-    timer = Timer(spirit, 50e6)
+    timer = Timer(spirit, int(50e6))
     timer.set_rx_timeout_stop_conditions()
     timer.set_rx_timeout_counter(0)
 
@@ -148,11 +143,8 @@ async def main():
         if nxt in [True, False]:
             break
 
-        if (len(nxt.payload) - 3) % 16 == 0:
-            decoded_str = " ".join([f"{x:02x}" for x in cipher.decrypt(nxt.payload[3:])])
-            print(f"{nxt.one_line()} => {decoded_str}")
-        else:
-            print(nxt.one_line())
+        print(nxt.one_line())
+        print(f"    {{'address': 0x{nxt.address:02x}, 'control': [{nxt.ctrl_str()}], 'payload': [{nxt.payload_str()}]}},")
 
         received += 1
         if received >= pkt_count:

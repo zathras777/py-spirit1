@@ -102,7 +102,9 @@ class Spirit1:
         return self._spi_xfer(*regs)
 
     def write_linear_fifo(self, data:AnyStr) -> bytearray:
-        regs = [0x0, 0xFF] + [ord(a) for a in data]
+        regs = [0x0, 0xFF]
+        for a in data:
+            regs.append(a if isinstance(a, int) else ord(a))
         return self._spi_xfer(*regs)
 
     def linear_fifo_rx_size(self) -> int:

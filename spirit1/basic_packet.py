@@ -1,4 +1,5 @@
 import logging
+import time
 
 from typing import List, Optional
 
@@ -11,15 +12,29 @@ logger = logging.getLogger(__name__)
 
 
 class BasicPacketMessage:
-    def __init__(self, base:ReceivedMessage, addr:Optional[int], ctrl_data:Optional[list[int]], crc:Optional[list[int]]):
-        self.address = addr
-        self.ctrl_data = ctrl_data
-        self.payload = base.payload
-        self.rssi = base.rssi
-        self.sqi = base.sqi
-        self.pqi = base.pqi
-        self.agc_word = base.agc_word
-        self.crc_fields = crc
+    def __init__(self):
+        self.address:Optional(int) = None
+        self.ctrl_data:Optional(List[int]) = None
+        self.payload:Optional(bytes) = None
+        self.encoded:Optional(bytes) = None
+        self.rssi:Optional(int) = None
+        self.sqi:Optional(int) = None
+        self.pqi:Optional(int) = None
+        self.agc_word:Optional(int) = None
+        self.crc_fields:Optional(List[int]) = None
+
+    @classmethod
+    def from_received_message(cls, base:ReceivedMessage, addr:Optional[int], ctrl_data:Optional[list[int]], crc:Optional[list[int]]):
+        obj = cls()
+        obj.address = addr
+        obj.ctrl_data = ctrl_data
+        obj.payload = base.payload
+        obj.rssi = base.rssi
+        obj.sqi = base.sqi
+        obj.pqi = base.pqi
+        obj.agc_word = base.agc_word
+        obj.crc_fields = crc
+        return obj
 
     def __repr__(self) -> str:
         return f"Basic Packet Message: {len(self.payload)} bytes"
@@ -113,14 +128,65 @@ class BasicPacket:
 
         return True
 
+    def get_crc(self):
+        if self.crc_mode == CrcMode.CRC_MODE_OFF:
+            return None
+        reg = Spirit1Registers.CRC_FIELD_2
+        len = 3
+        if self.crc_mode in [CrcMode.CRC_MODE_7]:
+            reg = Spirit1Registers.CRC_FIELD_0
+            len = 1
+        elif self.crc_mode in [CrcMode.CRC_MODE_1021, CrcMode.CRC_MODE_8005]:
+            reg = Spirit1Registers.CRC_FIELD_1
+            len = 2
+        crc = list(self.spirit.read_n_registers(reg, len))
+        crc.reverse()
+        return crc
+
+    def get_ctrl_data(self):
+        if self.control_length == 0:
+            return None
+        reg = Spirit1Registers.RX_CTRL_FIELD_3
+        len = 4
+        if self.control_length == 3:
+            reg = Spirit1Registers.RX_CTRL_FIELD_2
+            len = 3
+        elif self.control_length == 2:
+            reg = Spirit1Registers.RX_CTRL_FIELD_1
+            len = 2
+        elif self.control_length == 1:
+            reg = Spirit1Registers.RX_CTRL_FIELD_0
+            len = 1
+        
+        ctrl_data = list(self.spirit.read_n_registers(reg, len))
+        #ctrl_data.reverse()
+        return ctrl_data
+
+    def set_tx_ctrl_data(self, data:list):
+        if self.control_length > 0:
+            if len(data) < self.control_length:
+                raise ValueError(f"Basic Packet configured for {self.control_length} control fields, only {len(msg.ctrl_data)} supplied")
+        reg:Spirit1Registers = Spirit1Registers.TX_CTRL_3
+        if self.control_length == 3:
+            reg = Spirit1Registers.TX_CTRL_2
+        elif self.control_length == 2:
+            reg = Spirit1Registers.TX_CTRL_1
+        elif self.control_length == 1:
+            reg = Spirit1Registers.TX_CTRL_0
+        rev_list = data[:self.control_length]
+        #rev_list.reverse()
+        self.spirit.write_registers(reg, *rev_list)
+
+    def set_payload_length(self, p_len:int):
+        total_len = p_len + self.control_length
+        if self.address_field:
+            total_len += 1
+        data = [(total_len >> 8) & 0xff, total_len & 0xff]
+        self.spirit.write_registers(Spirit1Registers.PKTLEN_1, *data)
+ 
     def set_packet_length(self, sz:int):
         wid = (sz.bit_length() - 1) & 0x0F
         self.spirit.update_register(Spirit1Registers.PKTCTRL_3, 0xF0, wid)
-#        tmp = self.spirit.read_registers(Spirit1Registers.PKTCTRL_3)[0]
-#        tmp = (tmp & 0xF0) + wid
-#        self.spirit.write_registers(0x31, tmp)
-
-
 
     def settings(self):
         pktctrl = self.spirit.read_registers(Spirit1Registers.PKTCTRL_4, 
@@ -173,18 +239,31 @@ class BasicPacket:
 
     def get_message(self, base:ReceivedMessage) -> BasicPacketMessage:
         addr:Optional[int] = None
-        ctrl_data:Optional[list[int]] = None
-        crc:Optional[list[int]] = None
 
         if self.address_field:
             addr = self.spirit.read_registers(Spirit1Registers.RX_ADDRESS_0)[0]
-        if self.control_length > 0:
-            ctrl_data = list(self.spirit.read_n_registers(Spirit1Registers.RX_CTRL_FIELD_3, self.control_length))
-        if self.crc_mode != CrcMode.CRC_MODE_OFF:
-            crclen = 1
-            if self.crc_mode in [CrcMode.CRC_MODE_8005, CrcMode.CRC_MODE_1021]:
-                crclen = 2
-            elif self.crc_mode == CrcMode.CRC_MODE_864CBF:
-                crclen = 3
-            crc = list(self.spirit.read_n_registers(Spirit1Registers.CRC_FIELD_2, crclen))
-        return BasicPacketMessage(base, addr, ctrl_data, crc)
+        ctrl_data = self.get_ctrl_data()
+        crc = self.get_crc()
+        return BasicPacketMessage.from_received_message(base, addr, ctrl_data, crc)
+
+    def send_message(self, msg:BasicPacketMessage) -> bool:
+        if self.address_field:
+            if msg.address is None:
+                raise ValueError("Basic Packet configured for address, but none supplied")
+            self.spirit.write_registers(Spirit1Registers.RX_SOURCE_ADDR, msg.address)
+        self.set_tx_ctrl_data(msg.ctrl_data)
+
+        if self.fixed_length:
+            self.set_payload_length(len(msg.payload))
+
+        self.spirit.flush_tx_fifo()
+        self.spirit.write_linear_fifo(list(msg.payload))
+
+        if not self.spirit.start_tx():
+            return False
+        
+        while self.spirit.linear_fifo_tx_size() != 0:
+            time.sleep(1)
+
+        return True
+    

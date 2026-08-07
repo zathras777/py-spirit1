@@ -1,31 +1,73 @@
 # py-spirit1
 Python library to support using the SPIRIT1 RF chip
+https://www.st.com/resource/en/datasheet/spirit1.pdf
+
+## Install
+
+Install from a checkout:
+
+```shell
+python -m pip install .
+```
+
+On Linux hardware, install the optional `spidev` dependency too:
+
+```shell
+python -m pip install '.[hardware]'
+```
 
 ## Usage
+
 ```python
-import spidev
+from spirit1 import Radio, RadioConfig, open_spidev
 
-from spirit1 import Spirit1
-from spirit1.radio import Radio
+spirit = open_spidev(bus=0, device=0, speed_hz=250_000)
+try:
+    config = RadioConfig(base_frequency=868_200_000, datarate=50_000)
+    radio = Radio(spirit, config)
+    radio.init_device()
 
-# Open the SPI device
-spi = spidev.SpiDev()
-spi.open(0, 0)
-spi.max_speed_hz = 250000
-spi.mode = 0b00
-
-# Create the Spirit1 object using the SPI device
-spirit = Spirit1(spi)
-radio = Radio(spirit)
-# Configure the radio as required.
-radio.init_device()
-
-...
+    # Configure and use the radio as required.
+finally:
+    spirit.close()
 
 ```
 
+There is a small script that can dump the device configuration via the various SPI registers.
+
 ```shell
-$ python ./example.py 10
+$ PYTHONPATH=src python examples/dump_config.py --bus 0 --device 0
+
+SPIRIT1 configuration:
+  0x01 ANA                      0xC0
+  0x07 IF_OFFSET_ANA            0x36
+  0x08 SYNT_3                   0x2D
+  0x09 SYNT_2                   0x05
+  0x0A SYNT_1                   0xE3
+  0x0B SYNT_0                   0x51
+  0x0C CHANNEL_SPACE_FACTOR     0x84
+  0x0D IF_OFFSET_DIG            0xAC
+  0x0E FC_OFFSET_HI             0x00
+  0x0F FC_OFFSET_LO             0x00
+  0x10 PA_POWER_8               0x03
+  0x11 PA_POWER_7               0x01
+  0x12 PA_POWER_6               0x1A
+  0x13 PA_POWER_5               0x25
+  0x14 PA_POWER_4               0x35
+  0x15 PA_POWER_3               0x40
+  0x16 PA_POWER_2               0x4E
+  0x17 PA_POWER_1               0x00
+  0x18 PA_POWER_0               0x00
+  0x1A MOD1                     0x06
+  0x1B MOD0                     0x5B
+  0x1C FDEV0                    0x45
+  ...
+```
+
+To simply view messages via the device, the example script does that using a radio configuration that works for me. It may not find any messages for you and may well need adjusting.
+
+```shell
+$ PYTHONPATH=src python examples/example.py 10
 01:59:01 DEBUG selector_events - __init__: Using selector: EpollSelector
 Trying to receive 10 messages.
 Message: 
@@ -34,41 +76,34 @@ Message:
   CRC Data:     d6 8e c1
   RSSI: 97  SQI: 32  PQI: 12  AGC_WORD: 8
   Payload: 05 ff 00 5c 03 e1 40 85 82 6b 80 3e fd 9b 6f 52 7d 28 38
-```
-
-```shell
-$ python ./example.py 
-16:02:46 DEBUG selector_events - __init__: Using selector: EpollSelector
-Trying to receive 30 messages.
-ff 53 00 39 06 05 ff 00 b4 30 06 92 44 5a 31 7b 8c 1b 70 7c e6 71 5c 8d => 19 6d 9b 66 15 ae a1 8f 6e f0 23 cc 96 d0 4c 1c
-ff fc 00 32 06 05 ff 00 2e 3e c8 ce 95 da 00 ff e5 a2 86 db 1f ea b6 e8 => 02 01 0a 6c 72 38 00 00 00 00 24 01 40 d0 15 66
 ...
 ```
 
 ## Background
-This project has been written to allow me to use the chip in order to control some heaters remotely. The RF controllers for these heaters use the SPIRIT1 internally, so using the same chip allows me to investigate the protocol and then hopefully emulate it.
 
-The chip was accessed via a Nucleo IDS01A5 development board using a RaspberryPi for SPI.
+While trying to figure out the RF communication protocol for a small remote I discovered that it used the Spirit1 RF chip. To delve further into the protocol and to simplify collection while also permitting me to have transmit ability to replace the remote entirely, I got a Nucleo IDS01A5 development board.
+
 - https://www.st.com/en/ecosystems/x-nucleo-ids01a5.html
-- https://blog.david-reid.com/rf-controller-part-6/
 
-Much of the structure and details of this library are from the available development library that STMicroelectronics makes available via their website. I did experiment with using their IDE but it wasn't a simple exercise and never led to any working code.
+After attaching this to a RaspberryPi, I was able to control the chip and retrieve messages using this library.
 
-Presently the receiver is very basic and doesn't use the available physical GPIO connections. This is mainly due to not having connected them yet as I wanted to make sure that this could be made to work reliably first.
+## Inspecting Configuration
 
-The example.py file works and captures packets between the RF controllers and the heaters. It accepts a single argument that determines how many packets the receiver will capture before exiting.
+To print the device's stable configuration registers without changing its state, run:
 
-## Example Script
-The example.py script has additions beyond simply accessing and controlling the SPIRIT1 chipset while I continue to investigate the controller that led to this module. These will be removed soon :-)
+```shell
+$ PYTHONPATH=src python examples/dump_config.py --bus 0 --device 0
+```
 
 ## Limitations
-Presently only a fraction of the full functionality is implemented. To date I have focussed on what I needed, but the basics are there and adding additional fucntionality isn't difficult.
-- only basic packet types are included as that's what I have been interested in
-- no transmission code is yet included
-- no GPIO support yet as I haven't needed it
+Presently only a fraction of the full functionality is implemented.
 
-## Next Steps
-Now that this library is able to receive packets the next step is to decode the protocol. I have looked at sending data via the chip and that works as expected, though it is not yet included in the library.
-The receiver is far from ideal and so moving to using a physical GPIO and possibly async code is on any future roadmap.
+- Basic-packet receive and transmit support is implemented.
+- STack packet configuration and decoding are experimental; automatic ACK/retry and sequence-number behavior need hardware validation.
+- Wireless M-Bus packets are not implemented.
+- GPIO interrupt support is not implemented.
 
-As always, there will be numerous bugs and much of the code can be improved, so pull requests are welcome.
+## Status
+The library has been rewritten to be more robust and provide a simpler interface.
+
+Improvements are welcome!

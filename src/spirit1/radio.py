@@ -1,63 +1,131 @@
 import logging
 import math
 
-from typing import List
+from typing import List, Optional
 
-from . import Spirit1
-from .constants import Spirit1Modulation
+from .device import Spirit1Device
+from .enums import Spirit1Modulation
 from .registers import Spirit1Registers
 from .frequency import Frequency
+from .radio_config import RadioConfig
 
 logger = logging.getLogger(__name__)
 
 
-PPM_FACTOR = 1000000  # 2e6
-FBASE_DIVIDER   = 262144   # 2^18
-CHSPACE_DIVIDER = 32768    # 2^15
-DOUBLE_XTAL_THR = 30000000 # Threshold for double XTAL frequency
+PPM_FACTOR = 1_000_000
+FBASE_DIVIDER = 262_144  # 2^18
+CHSPACE_DIVIDER = 32_768  # 2^15
+DOUBLE_XTAL_THR = 30_000_000
 
 
 class Radio:
-    DEFAULTS = {
-        'base_frequency': int(868.0e6),
-        'channel_space': int(20e3),
-        'channel_number': 0,
-        'modulation': Spirit1Modulation.GFSK_BT1,
-        'datarate': 50000,
-        'freq_deviation': int(20e3),
-        'bandwidth': int(100e3),
-    }
+    """Applies a :class:`RadioConfig` to a SPIRIT1 device."""
 
-    def __init__(self, spirit:Spirit1):
+    def __init__(self, spirit: Spirit1Device, config: Optional[RadioConfig] = None):
         self.spirit = spirit
-        self.set_xtal_frequency(26e6)
-        for k,v in self.DEFAULTS.items():
-            setattr(self, k, v)
+        self.config = config or RadioConfig()
 
-        self.frequency_base:Frequency = None
-        self.digital_divider:bool = False
-        self.reference_divider:bool = False
-        self.frequency_offset:int = 0
+    @property
+    def xtal_frequency(self) -> int:
+        return self.config.xtal_frequency
 
-        self.update_from_device()
+    @xtal_frequency.setter
+    def xtal_frequency(self, value: int) -> None:
+        self.config.xtal_frequency = value
+
+    @property
+    def channel_space(self) -> int:
+        return self.config.channel_space
+
+    @channel_space.setter
+    def channel_space(self, value: int) -> None:
+        self.config.channel_space = value
+
+    @property
+    def channel_number(self) -> int:
+        return self.config.channel_number
+
+    @channel_number.setter
+    def channel_number(self, value: int) -> None:
+        self.config.channel_number = value
+
+    @property
+    def modulation(self) -> Spirit1Modulation:
+        return self.config.modulation
+
+    @modulation.setter
+    def modulation(self, value: Spirit1Modulation) -> None:
+        self.config.modulation = value
+
+    @property
+    def datarate(self) -> int:
+        return self.config.datarate
+
+    @datarate.setter
+    def datarate(self, value: int) -> None:
+        self.config.datarate = value
+
+    @property
+    def freq_deviation(self) -> int:
+        return self.config.freq_deviation
+
+    @freq_deviation.setter
+    def freq_deviation(self, value: int) -> None:
+        self.config.freq_deviation = value
+
+    @property
+    def bandwidth(self) -> int:
+        return self.config.bandwidth
+
+    @bandwidth.setter
+    def bandwidth(self, value: int) -> None:
+        self.config.bandwidth = value
+
+    @property
+    def frequency_offset(self) -> int:
+        return self.config.frequency_offset
+
+    @frequency_offset.setter
+    def frequency_offset(self, value: int) -> None:
+        self.config.frequency_offset = value
+
+    @property
+    def reference_divider(self) -> bool:
+        if self.config.reference_divider is None:
+            raise RuntimeError("Reference divider has not been resolved from the device")
+        return self.config.reference_divider
+
+    @reference_divider.setter
+    def reference_divider(self, value: bool) -> None:
+        self.config.reference_divider = value
+
+    @property
+    def digital_divider(self) -> bool:
+        return self.config.digital_divider
+
+    @digital_divider.setter
+    def digital_divider(self, value: bool) -> None:
+        self.config.digital_divider = value
+
+    @property
+    def frequency_base(self) -> Frequency:
+        return self.config.frequency_base
+
+    @frequency_base.setter
+    def frequency_base(self, value: Frequency) -> None:
+        self.config.frequency_base = value
 
     def get_settings(self) -> dict:
-        rv = {}
-        for k in self.DEFAULTS.keys():
-            rv[k] = getattr(self, k) if hasattr(self, k) else self.DEFAULTS[k]
-        return rv
+        return self.config.as_dict()
 
     def validate(self) -> bool:
-        if not 100 < self.datarate <510000:
-            logger.error("Invalid datarate selected. Must be between 100 and 510000.")
-            return False
-        if not self.frequency_base.is_possible():
-            logger.error("Invalid base frequency. Outwith permitted bands.")
-            return False
-        return True
+        errors = self.config.validate()
+        for error in errors:
+            logger.error("Invalid radio configuration: %s", error)
+        return not errors
 
-    def update_from_device(self):
-        """ Read various setting from the device. """
+    def update_from_device(self) -> None:
+        """Read radio configuration values from the device."""
         self.get_reference_divider()
         self.get_channel_number()
         self.get_channel_space()
@@ -65,7 +133,12 @@ class Radio:
         self.get_frequency_offset()
         self.get_datarate()
 
-    def init_device(self):
+    def init_device(self) -> bool:
+        """Validate and apply the current configuration to the device."""
+        if not self.validate():
+            return False
+        self._configure_reference_divider()
+        self.set_xtal_frequency(self.xtal_frequency)
         # Switch off external SMPS.
         self.spirit.set_register_bit(Spirit1Registers.PM_CONFIG_2, 5, False)
         # Set the higher SEL_TSPLIT time.
@@ -87,36 +160,47 @@ class Radio:
         self.spirit.write_registers(Spirit1Registers.IQC_1, 0x80, 0xE3)
 
         self.write_frequency_base()
+        return True
 
-    def set_xtal_frequency(self, xtal:int):
-        """ Set the XTAL frequency """
+    def _configure_reference_divider(self) -> None:
+        """Preserve the device divider unless the configuration overrides it."""
+        if self.config.reference_divider is None:
+            self.get_reference_divider()
+        else:
+            self.set_reference_divider(self.config.reference_divider)
+
+    def set_xtal_frequency(self, xtal: int) -> None:
+        """Set the XTAL frequency and the corresponding divider state."""
         self.xtal_frequency = int(xtal)
-        self.set_digital_divider(xtal > DOUBLE_XTAL_THR)
-        if xtal > DOUBLE_XTAL_THR:
-             xtal /= 2
-        self.spirit.set_register_bit(Spirit1Registers.ANA, 6, xtal >= 25e6)
+        self.set_digital_divider(self.xtal_frequency > DOUBLE_XTAL_THR)
+        analog_xtal = self.xtal_frequency
+        if analog_xtal > DOUBLE_XTAL_THR:
+            analog_xtal /= 2
+        self.spirit.set_register_bit(Spirit1Registers.ANA, 6, analog_xtal >= 25e6)
 
-    def get_reference_divider(self):
+    def get_reference_divider(self) -> None:
         self.reference_divider = not self.spirit.get_register_bit(Spirit1Registers.XO_RCO_TEST, 3)
 
-    def set_reference_divider(self, onoff:bool):
+    def set_reference_divider(self, onoff: bool) -> None:
         self.spirit.set_register_bit(Spirit1Registers.XO_RCO_TEST, 3, not onoff)
+        self.reference_divider = onoff
 
-    def get_digital_divider(self):
-        """ Get the current setting of the digital dividers. True = Enabled. """
+    def get_digital_divider(self) -> None:
+        """Get the current setting of the digital dividers."""
         self.digital_divider = self.spirit.get_register_bit(Spirit1Registers.SYNTH_CONFIG_HI, 7)
 
-    def set_digital_divider(self, onoff:bool):
-        """ Enable/disable the digital dividers. True = Enable. """
+    def set_digital_divider(self, onoff: bool) -> bool:
+        """Enable or disable the digital dividers."""
         if not self.spirit.standby():
             logger.warning("Unable to change to standby to set the digital divider flag")
-            return
+            return False
         self.spirit.set_register_bit(Spirit1Registers.SYNTH_CONFIG_HI, 7, onoff)
         self.spirit.ready()
         self.digital_divider = onoff
+        return True
 
     def get_channel_number(self):
-        self.channel_number = self.spirit.read_registers(Spirit1Registers.CHANNEL_NUMBER)[0] & 0xff
+        self.channel_number = self.spirit.read_register(Spirit1Registers.CHANNEL_NUMBER) & 0xff
 
     def set_channel_number(self, chan:int):
         self.channel_number = chan
@@ -126,7 +210,7 @@ class Radio:
         self.spirit.write_registers(Spirit1Registers.CHANNEL_NUMBER, self.channel_number)
 
     def get_channel_space(self):
-        ch_space_factor = self.spirit.read_registers(Spirit1Registers.CHANNEL_SPACE_FACTOR)[0]
+        ch_space_factor = self.spirit.read_register(Spirit1Registers.CHANNEL_SPACE_FACTOR)
         self.channel_space = int((ch_space_factor * self.xtal_frequency) / CHSPACE_DIVIDER)
 
     def set_channel_space(self, space:int):
@@ -138,7 +222,7 @@ class Radio:
         self.spirit.write_registers(Spirit1Registers.CHANNEL_SPACE_FACTOR, ch_space_factor)
 
     def get_frequency_offset(self):
-        vals = self.spirit.read_registers(Spirit1Registers.FC_OFFSET_HI, Spirit1Registers.FC_OFFSET_LO)
+        vals = self.spirit.read_register_block(Spirit1Registers.FC_OFFSET_HI, 2)
         self.frequency_offset = int(( (((vals[0] & 0x0F) << 8) + vals[1]) * self.xtal_frequency) / FBASE_DIVIDER)
 
     def set_frequency_offset(self, offset:int):
@@ -151,10 +235,7 @@ class Radio:
         self.spirit.write_registers(Spirit1Registers.FC_OFFSET_LO, factor & 0xFF)
 
     def get_synth_word(self) -> int:
-        vals = self.spirit.read_registers(Spirit1Registers.SYNT_3, 
-                                          Spirit1Registers.SYNT_2, 
-                                          Spirit1Registers.SYNT_1, 
-                                          Spirit1Registers.SYNT_0)
+        vals = self.spirit.read_register_block(Spirit1Registers.SYNT_3, 4)
         return ((vals[0] & 0x1F) << 21) + (vals[1] << 13) + (vals[2] << 5) + ((vals[3] & 0xF8) >> 3)
 
     def get_frequency_base(self):
@@ -162,15 +243,16 @@ class Radio:
         band:int = self._get_band()
         self.frequency_base = Frequency.calculate(synth_word, self.xtal_frequency, self.reference_divider, band)
 
-    def set_frequency_base(self, freq:int):
+    def set_frequency_base(self, freq: int) -> bool:
         poss = Frequency(freq)
         if not poss.is_possible():
             logger.warning("Unable to set the new base frequency to %d as it's ouwith permitted bands", freq)
             return False
         self.frequency_base = poss
         self.write_frequency_base()
+        return True
 
-    def set_modulation_scheme(self, scheme:Spirit1Modulation):
+    def set_modulation_scheme(self, scheme: Spirit1Modulation) -> None:
         self.modulation = scheme
         self.write_modulation()
 
@@ -199,7 +281,7 @@ class Radio:
 
     def get_datarate(self):
         factor = 5 + int(self.digital_divider)
-        val = self.spirit.read_registers(Spirit1Registers.MOD1, Spirit1Registers.MOD0)
+        val = self.spirit.read_register_block(Spirit1Registers.MOD1, 2)
         self.datarate = ((self.xtal_frequency >> factor) * (256 + val[0])) >> (23 - (val[1] & 0x0f))
 
     def set_datarate(self, rate:int):
@@ -218,23 +300,24 @@ class Radio:
             pce = 0
         self.spirit.update_register(Spirit1Registers.MOD0, 0xF0, pce)
 
-        pcm = -1
         factor = 5 + int(self.digital_divider)
-        # Calculate the mantissa value according to the datarate formula */
-        mantissa_tmp = int((self.datarate * ((1 << (23 - i)) / (self.xtal_frequency >> factor)))) - 256
-        # Find the mantissa value with less approximation
-        mantissa_calc:list[int] = [0, 0, 0]
-        for j in range(3):
-            if mantissa_tmp + j - 1:
-                mantissa_calc[j] = self.datarate - (((256 + mantissa_tmp + j - 1) * (self.xtal_frequency >> factor)) >> (23 - i))
-            else:
-                mantissa_calc[j] = 0x7FFF
-
-        mantissa_calc_delta = 0xFFFF
-        for j in range(3):
-            if abs(mantissa_calc[j]) < mantissa_calc_delta:
-                mantissa_calc_delta = abs(mantissa_calc[j])
-                pcm = mantissa_tmp + j - 1
+        mantissa_base = int(
+            self.datarate * ((1 << (23 - pce)) / (self.xtal_frequency >> factor))
+        ) - 256
+        candidates = [
+            mantissa
+            for mantissa in range(mantissa_base - 1, mantissa_base + 2)
+            if 0 <= mantissa <= 0xFF
+        ]
+        if not candidates:
+            raise ValueError("Datarate cannot be represented by the current XTAL configuration")
+        pcm = min(
+            candidates,
+            key=lambda mantissa: abs(
+                self.datarate
+                - (((256 + mantissa) * (self.xtal_frequency >> factor)) >> (23 - pce))
+            ),
+        )
         self.spirit.write_registers(Spirit1Registers.MOD1, pcm)
 
     def write_frequency_deviation_me(self):
@@ -248,8 +331,9 @@ class Radio:
                 break
         self.spirit.update_register(Spirit1Registers.FDEV0, 0x0F, (pce << 4))
 
-        b = 0
-        bp = 0
+        b = 0.0
+        bp = 0.0
+        pcm = 0
         for i in range(8):
             bp = b
             b = xtal_div_tmp * ((8 + i) / 2 * (1 << pce))
@@ -261,7 +345,7 @@ class Radio:
         self.spirit.update_register(Spirit1Registers.FDEV0, 0xF8, (pcm & 0x07))
 
     def set_bandwidth(self, bandwidth:int):
-        self.set_bandwidth = bandwidth
+        self.bandwidth = bandwidth
         self.write_channel_bandwidth_me()
 
     def write_channel_bandwidth_me(self):
@@ -288,12 +372,12 @@ class Radio:
 
         if me != 0:
             me_tmp = me
-            chfltCalculation:list[int] = [0, 0, 0]
+            chfltCalculation: list[float] = [0.0, 0.0, 0.0]
             for j in range(3):
-                if (me_tmp + j - 1) >= 0 or (me_tmp + j - 1) <= 89:
+                if 0 <= (me_tmp + j - 1) <= 89:
                     chfltCalculation[j] = self.bandwidth - (s_vectnBandwidth26M[me_tmp + j -1] * chflt_factor) / 2600
                 else:
-                    chfltCalculation[j] = 0x7FFF
+                    chfltCalculation[j] = float("inf")
 
             chfltDelta = 0xFFFF
             for j in range(3):
@@ -350,7 +434,9 @@ class Radio:
 
         if c_restore:
             self.set_reference_divider(False)
-            self.write_frequency_base()
+            # This write restores the divider-specific synth value. Calibrating
+            # again here would recursively enter vco_calibration().
+            self.write_frequency_base(False)
 
         self.set_vco_calibration_data_tx(vcoTx)
         self.set_vco_calibration_data_rx(vcoRx)
@@ -364,7 +450,7 @@ class Radio:
         self.spirit.set_register_bit(Spirit1Registers.PROTOCOL_2, 2, onoff)
 
     def get_vco_calibration_data(self) -> int:
-        return self.spirit.read_registers(Spirit1Registers.RCO_VCO_CALIBR_OUT0)[0] & 0x7F
+        return self.spirit.read_register(Spirit1Registers.RCO_VCO_CALIBR_OUT0) & 0x7F
 
     def set_vco_calibration_data_tx(self, cal:int):
         self.spirit.write_registers(Spirit1Registers.RCO_VCO_CALIBR_IN1, cal)
@@ -376,7 +462,7 @@ class Radio:
         self.spirit.set_register_bit(Spirit1Registers.AFC_2, 7, onoff)
 
     def get_agc(self) -> bool:
-        return self.spirit._get_register_bit(Spirit1Registers.AGCCTRL_0, 7)
+        return self.spirit.get_register_bit(Spirit1Registers.AGCCTRL_0, 7)
 
     def set_agc(self, onoff:bool):
         self.spirit.set_register_bit(Spirit1Registers.AGCCTRL_0, 7, onoff)
@@ -406,7 +492,7 @@ class Radio:
 
     def get_dbm_2_reg(self, pwr:float) -> int:
         """ Returns the PA register value that corresponds to the passed dBm power. """
-        pwr_factors:List = self.frequency_base.power_factors()
+        pwr_factors: List[float] = self.frequency_base.power_factors()
 
         if pwr > 0 and (13.0 / pwr_factors[2] - pwr_factors[3] / pwr_factors[2]) < pwr:
             reg = pwr_factors[0] * pwr + pwr_factors[1]
@@ -419,15 +505,12 @@ class Radio:
             reg = 1
         elif reg > 90:
             reg = 90
-        return reg
+        return round(reg)
 
     # Internal functions...
     def _get_band(self) -> int:
-        return self.spirit.read_registers(Spirit1Registers.SYNT_0)[0] & 0x07
+        return self.spirit.read_register(Spirit1Registers.SYNT_0) & 0x07
 
     def _get_synth_word(self) -> int:
-        vals = self.spirit.read_registers(Spirit1Registers.SYNT_3, 
-                                          Spirit1Registers.SYNT_2, 
-                                          Spirit1Registers.SYNT_1, 
-                                          Spirit1Registers.SYNT_0)
+        vals = self.spirit.read_register_block(Spirit1Registers.SYNT_3, 4)
         return ((vals[0] & 0x1F) << 21) + (vals[1] << 13) + (vals[2] << 5) + ((vals[3] & 0xF8) >> 3)

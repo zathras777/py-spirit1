@@ -1,4 +1,6 @@
-from .constants import Spirit1State
+from typing import Sequence
+
+from .enums import Spirit1State
 
 
 class Spirit1Status:
@@ -10,7 +12,7 @@ class Spirit1Status:
         self.rx_fifo_empty:bool = False
         self.tx_fifo_full:bool = False
 
-    def update(self, vals:bytearray):
+    def update(self, vals: Sequence[int]) -> None:
         #self.state = vals[1] >> 1
         self.xo_on = (vals[1] & 0x01) == 0x01
         self.ant_select = (vals[0] & 0x08) == 0x08
@@ -21,4 +23,3 @@ class Spirit1Status:
             if sts.value == vals[1] >> 1:
                 self.state = sts
                 break
-        

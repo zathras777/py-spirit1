@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "spirit1"
+version = "0.1.0"
+description = "Python driver for the STMicroelectronics SPIRIT1 RF transceiver"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {file = "LICENSE"}
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "License :: Public Domain",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+]
+
+[project.optional-dependencies]
+hardware = ["spidev"]
+
+[project.urls]
+Homepage = "https://github.com/zathras777/py-spirit1"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.unittest]
+start-directory = "tests"

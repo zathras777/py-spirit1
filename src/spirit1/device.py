@@ -1,26 +1,40 @@
 import logging
 
-from typing import Any, AnyStr, List
+from typing import AnyStr, Union
 
 from .status import Spirit1Status
-from .constants import Spirit1Commands, Spirit1State
+from .enums import Spirit1Commands, Spirit1State
 from .registers import Spirit1Registers
+from .spi import SpiDevice
 
 
 logger = logging.getLogger(__name__)
 
+Register = Union[Spirit1Registers, int]
 
-class Spirit1:
-    def __init__(self, spi:Any):
+
+class Spirit1Device:
+    """Low-level SPIRIT1 device driver backed by an SPI transport."""
+
+    def __init__(self, spi: SpiDevice):
         self._spi = spi
         self.is_shutdown:bool = False
         self.debug_spi:bool = False
         self.debug_spi_tx:bool = False
-        self.status:Spirit1State = Spirit1Status()
+        self.status: Spirit1Status = Spirit1Status()
 
         self.refresh_status()
         if self.status.state == Spirit1State.LOCKWON:
             self.reset()
+
+    def close(self) -> None:
+        """Close an owned SPI transport when it provides a ``close`` method."""
+        if self.is_shutdown:
+            return
+        self.is_shutdown = True
+        close = getattr(self._spi, "close", None)
+        if callable(close):
+            close()
 
     # State Functions
     def reset(self) -> bool:
@@ -60,16 +74,21 @@ class Spirit1:
         self._spi_xfer(0x01, 0xC0, 0xC1)
 
     # SPI I/O
-    def read_registers(self, *args:Spirit1Registers) -> bytearray:
-        regs:tuple[int] = (0x01,) + tuple(a.value for a in args) + (0x00,)
+    def read_register(self, register: Register) -> int:
+        """Read and return the value of one register."""
+        return self.read_register_block(register, 1)[0]
+
+    def read_register_block(self, start: Register, count: int) -> bytearray:
+        """Read a consecutive register block in one SPI transaction."""
+        if count < 0:
+            raise ValueError("Register block size must not be negative")
+        start_address = start.value if isinstance(start, Spirit1Registers) else start
+        regs: tuple[int, ...] = (0x01, start_address) + tuple(0x0 for _ in range(count))
         return self._spi_xfer(*regs)
 
-    def read_n_registers(self, start:Spirit1Registers, n:int) -> bytearray:
-        regs:tuple[int] = (0x01, start) + tuple(0x0 for x in range(n))
-        return self._spi_xfer(*regs)
-
-    def write_registers(self, start_register:Spirit1Registers, *args:int) -> bytearray:
-        regs = [0x00, start_register.value] + list(args)
+    def write_registers(self, start_register: Register, *args: int) -> bytearray:
+        start_address = start_register.value if isinstance(start_register, Spirit1Registers) else start_register
+        regs = [0x00, start_address] + list(args)
         vals = self._spi_xfer(*regs)
         return vals
 
@@ -79,17 +98,16 @@ class Spirit1:
             return
         self._spi_xfer(0x80, cmd.value)
 
-    def get_register_bit(self, register:int, bit:int) -> bool:
-        vals = self.read_registers(register)
-        return (vals[0] & (1 << bit)) == (1 << bit)
+    def get_register_bit(self, register: Register, bit: int) -> bool:
+        return (self.read_register(register) & (1 << bit)) == (1 << bit)
 
-    def set_register_bit(self, register:int, bit:int, onoff:bool):
-        vals = self.read_registers(register)
-        vals[0] = (vals[0] & (0xFF - (1 << bit))) + (onoff << bit)
-        self.write_registers(register, vals[0])
+    def set_register_bit(self, register: Register, bit: int, onoff: bool) -> None:
+        value = self.read_register(register)
+        value = (value & (0xFF - (1 << bit))) + (onoff << bit)
+        self.write_registers(register, value)
 
-    def update_register(self, register:Spirit1Registers, mask:int, add:int):
-        val = self.read_registers(register)[0]
+    def update_register(self, register: Register, mask: int, add: int) -> None:
+        val = self.read_register(register)
         val = (val & mask) + add
         self.write_registers(register, val)
 
@@ -108,30 +126,35 @@ class Spirit1:
         return self._spi_xfer(*regs)
 
     def linear_fifo_rx_size(self) -> int:
-        return self.read_registers(Spirit1Registers.LINEAR_FIFO_STATUS_0)[0] & 0x7F
+        return self.read_register(Spirit1Registers.LINEAR_FIFO_STATUS_0) & 0x7F
 
     def linear_fifo_tx_size(self) -> int:
-        return self.read_registers(Spirit1Registers.LINEAR_FIFO_STATUS_1)[0] & 0x7F
+        return self.read_register(Spirit1Registers.LINEAR_FIFO_STATUS_1) & 0x7F
 
     # Internal functions...
     def _spi_xfer(self, *args:int) -> bytearray:
         if self.is_shutdown:
-            logger.warning("Device is shutdown. Call enable() to activate.")
+            logger.warning("Device is closed.")
             return bytearray()
         if self.debug_spi or (args[0] == 0x00 and self.debug_spi_tx):
             wr = "SPI >>> " + " ".join([f"{x:02x}" for x in args])
             logger.debug(wr)
-        vals = self._spi.xfer2(args)
+        vals = bytearray(self._spi.xfer2(args))
         if self.debug_spi:
             rc = "SPI <<< " + " ".join([f"{x:02x}" for x in vals])
             logger.debug(rc)
         self.status.update(vals)
         return bytearray(vals[2:])
 
-    def _change_state(self, cmd:int, new_state:Spirit1State)-> bool:
-        if not cmd in Spirit1Commands:
-            logger.warning("Unable to change state using command %02x as it's not in the command list?", cmd)
-            return False
+    def _change_state(self, cmd: Spirit1Commands, new_state: Spirit1State) -> bool:
+        if self.status.state == Spirit1State.LOCKWON and cmd != Spirit1Commands.SRES:
+            logger.warning(
+                "Device reported LOCKWON while changing to %s; resetting before retrying",
+                new_state.name,
+            )
+            if not self.reset():
+                logger.error("Unable to recover the device from LOCKWON")
+                return False
         self.send_command(cmd)
         cycles:int = 0
         while self.status.state != new_state:
@@ -140,5 +163,5 @@ class Spirit1:
             if cycles >= 20:
                 logger.error("Unable to change state. Presently in %s but wanted %s", self.status.state.name, new_state.name)
                 return False
-        
+
         return True

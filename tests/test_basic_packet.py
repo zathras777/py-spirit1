@@ -29,6 +29,20 @@ class PacketDevice:
     def write_registers(self, register, *values):
         self.writes.append(("write", register, values))
 
+    def flush_tx_fifo(self):
+        self.writes.append(("flush_tx_fifo",))
+        return True
+
+    def write_linear_fifo(self, payload):
+        self.writes.append(("write_linear_fifo", bytes(payload)))
+
+    def start_tx(self):
+        self.writes.append(("start_tx",))
+        return True
+
+    def linear_fifo_tx_size(self):
+        return 0
+
 
 class RawSource:
     async def receive(self):
@@ -131,3 +145,19 @@ class BasicPacketTests(unittest.TestCase):
             return [message.payload async for message in packet.receive(RawSource())]
 
         self.assertEqual(asyncio.run(collect_payloads()), [b"\x01\x02"])
+
+    def test_transmit_sets_total_packet_length_for_variable_packets(self):
+        device = PacketDevice()
+        packet = BasicPacket(device, BasicPacketConfig(address_field=True, control_length=4))
+
+        self.assertTrue(packet.transmit(BasicPacketMessage(
+            payload=b"\x04",
+            destination_address=0x00,
+            source_address=0x00,
+            control_data=b"\xC6\x01\x00\x00",
+        )))
+
+        self.assertIn(
+            ("write", Spirit1Registers.PKTLEN_1, (0x00, 0x07)),
+            device.writes,
+        )

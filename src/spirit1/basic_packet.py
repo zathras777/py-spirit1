@@ -140,8 +140,7 @@ class BasicPacket:
         elif message.source_address is not None or message.destination_address is not None:
             raise ValueError("Packet addresses require address_field=True")
         self._write_control_data(message.control_data)
-        if self.config.fixed_length:
-            self._set_payload_length(len(message.payload))
+        self._set_payload_length(len(message.payload))
 
         self.spirit.flush_tx_fifo()
         self.spirit.write_linear_fifo(message.payload)
@@ -176,7 +175,7 @@ class BasicPacket:
         self.spirit.write_registers(register, *values)
 
     def _set_payload_length(self, payload_length: int) -> None:
-        total_length = payload_length + self.config.control_length + int(self.config.address_field)
+        total_length = payload_length + self.config.control_length + (2 if self.config.address_field else 0)
         if not 0 <= total_length <= 0xFFFF:
             raise ValueError("Payload plus packet overhead must fit in 65535 bytes")
         self.spirit.write_registers(

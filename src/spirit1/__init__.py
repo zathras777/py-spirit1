@@ -12,7 +12,7 @@ from .spi import SpiDevice
 from .spidev import open_spidev
 from .stack_packet import ExperimentalStackPacketWarning, StackPacket, StackPacketConfig, StackPacketMessage
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 __all__ = [
     "BasicPacket",

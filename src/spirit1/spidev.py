@@ -1,6 +1,9 @@
 """Optional convenience support for Linux's :mod:`spidev` package."""
 
+from typing import Optional
+
 from .device import Spirit1Device
+from .gpio import ShutdownPin
 
 
 def open_spidev(
@@ -8,6 +11,7 @@ def open_spidev(
     device: int = 0,
     speed_hz: int = 250_000,
     mode: int = 0b00,
+    sdn: Optional[ShutdownPin] = None,
 ) -> Spirit1Device:
     """Open a Linux SPI device and return a configured :class:`Spirit1Device`.
 
@@ -34,7 +38,7 @@ def open_spidev(
         spi.open(bus, device)
         spi.max_speed_hz = speed_hz
         spi.mode = mode
-        return Spirit1Device(spi)
+        return Spirit1Device(spi, sdn=sdn)
     except BaseException:
         spi.close()
         raise

@@ -10,19 +10,25 @@ Install from a checkout:
 python -m pip install .
 ```
 
-On Linux hardware, install the optional `spidev` dependency too:
+On a Raspberry Pi, install both the optional SPI and GPIO dependencies:
 
 ```shell
-python -m pip install '.[hardware]'
+python -m pip install '.[raspberry-pi]'
 ```
 
 ## Usage
 
 ```python
-from spirit1 import Radio, RadioConfig, open_spidev
+from spirit1 import Radio, RadioConfig, open_gpiozero_sdn, open_spidev
 
-spirit = open_spidev(bus=0, device=0, speed_hz=250_000)
+sdn = open_gpiozero_sdn(4)  # BCM GPIO4, physical header pin 7
+spirit = open_spidev(bus=0, device=0, speed_hz=250_000, sdn=sdn)
 try:
+    if spirit.is_shutdown() and not spirit.wake():
+        raise RuntimeError("SPIRIT1 did not respond after waking")
+    if not spirit.check_communication():
+        raise RuntimeError("SPIRIT1 is not responding")
+
     config = RadioConfig(base_frequency=868_200_000, datarate=50_000)
     radio = Radio(spirit, config)
     radio.init_device()
@@ -30,6 +36,7 @@ try:
     # Configure and use the radio as required.
 finally:
     spirit.close()
+    sdn.close()
 
 ```
 

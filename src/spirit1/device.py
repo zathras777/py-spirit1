@@ -1,4 +1,5 @@
 import logging
+import time
 
 from typing import AnyStr, Union
 
@@ -146,22 +147,30 @@ class Spirit1Device:
         self.status.update(vals)
         return bytearray(vals[2:])
 
+
     def _change_state(self, cmd: Spirit1Commands, new_state: Spirit1State) -> bool:
         if self.status.state == Spirit1State.LOCKWON and cmd != Spirit1Commands.SRES:
-            logger.warning(
-                "Device reported LOCKWON while changing to %s; resetting before retrying",
-                new_state.name,
-            )
-            if not self.reset():
-                logger.error("Unable to recover the device from LOCKWON")
-                return False
+                logger.warning(
+                    "Device reported LOCKWON while changing to %s; resetting before retrying",
+                    new_state.name,
+                )
+                if not self.reset():
+                    logger.error("Unable to recover the device from LOCKWON")
+                    return False
+
         self.send_command(cmd)
-        cycles:int = 0
+
+        deadline = time.monotonic() + 0.1  # 100 ms
         while self.status.state != new_state:
-            cycles += 1
-            self.refresh_status()
-            if cycles >= 20:
-                logger.error("Unable to change state. Presently in %s but wanted %s", self.status.state.name, new_state.name)
+            if time.monotonic() >= deadline:
+                logger.error(
+                    "Unable to change state. Presently in %s but wanted %s",
+                    self.status.state.name,
+                    new_state.name,
+                )
                 return False
+
+            time.sleep(0.001)  # 1 ms
+            self.refresh_status()
 
         return True

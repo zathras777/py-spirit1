@@ -20,3 +20,7 @@ class PackageMetadataTests(unittest.TestCase):
     def test_public_radio_and_receiver_exports(self):
         self.assertIn("Radio", spirit1.__all__)
         self.assertIn("Receiver", spirit1.__all__)
+
+    def test_public_gpio_exports(self):
+        self.assertIn("ShutdownPin", spirit1.__all__)
+        self.assertIn("open_gpiozero_sdn", spirit1.__all__)

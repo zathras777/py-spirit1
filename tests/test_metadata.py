@@ -5,7 +5,7 @@ import spirit1
 
 class PackageMetadataTests(unittest.TestCase):
     def test_public_version(self):
-        self.assertEqual(spirit1.__version__, "0.1.1")
+        self.assertEqual(spirit1.__version__, "0.1.2")
 
     def test_public_driver_export(self):
         self.assertIn("Spirit1Device", spirit1.__all__)

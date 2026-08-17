@@ -3,7 +3,12 @@ import unittest
 
 from spirit1.basic_packet import BasicPacket, BasicPacketConfig, BasicPacketMessage
 from spirit1.enums import CrcMode
-from spirit1.formatting import basic_packet_to_dict, format_basic_packet, format_basic_packet_one_line, to_dict
+from spirit1.formatting import (
+    basic_packet_to_dict,
+    format_basic_packet,
+    format_basic_packet_one_line,
+    to_dict,
+)
 from spirit1.receiver import ReceivedMessage
 from spirit1.registers import Spirit1Registers
 

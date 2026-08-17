@@ -1,11 +1,13 @@
 """SPIRIT1 basic-packet configuration, decoding, and streaming."""
 
-import time
-from dataclasses import dataclass, field
-from typing import AsyncIterator, Optional, Sequence
+from __future__ import annotations
 
-from .enums import CrcMode
+import time
+from collections.abc import AsyncIterator, Sequence
+from dataclasses import dataclass, field
+
 from .device import Spirit1Device
+from .enums import CrcMode
 from .receiver import ReceivedMessage, Receiver
 from .registers import Spirit1Registers
 
@@ -27,15 +29,11 @@ class BasicPacketConfig:
         return len(self.sync_words)
 
     def validate(self) -> list[str]:
-        errors = []
+        errors: list[str] = []
         if not 1 <= self.preamble_length <= 32:
             errors.append("Preamble length must be between 1 and 32 bytes")
         if not 1 <= self.sync_length <= 4:
             errors.append("Supply between 1 and 4 sync words")
-        if any(not isinstance(word, int) or not 0 <= word <= 0xFF for word in self.sync_words):
-            errors.append("Sync words must be byte values")
-        if not isinstance(self.crc_mode, CrcMode):
-            errors.append("CRC mode must be a CrcMode value")
         if not 0 <= self.control_length <= 4:
             errors.append("Control length must be between 0 and 4 bytes")
         if self.fixed_length and not 1 <= self.fixed_packet_length <= 0xFFFF:
@@ -48,39 +46,39 @@ class BasicPacketMessage:
     """A decoded basic packet, or a message prepared for transmission."""
 
     payload: bytes
-    source_address: Optional[int] = None
-    destination_address: Optional[int] = None
+    source_address: int|None = None
+    destination_address: int|None = None
     control_data: bytes = b""
-    crc: Optional[bytes] = None
-    raw: Optional[ReceivedMessage] = None
+    crc: bytes|None = None
+    raw: ReceivedMessage|None = None
 
     @property
-    def rssi(self) -> Optional[int]:
+    def rssi(self) -> int|None:
         return self.raw.rssi if self.raw else None
 
     @property
-    def crc_valid(self) -> Optional[bool]:
+    def crc_valid(self) -> bool|None:
         """Whether SPIRIT1 accepted this received packet's CRC, if known."""
         return self.raw.crc_valid if self.raw else None
 
     @property
-    def sqi(self) -> Optional[int]:
+    def sqi(self) -> int|None:
         return self.raw.sqi if self.raw else None
 
     @property
-    def pqi(self) -> Optional[int]:
+    def pqi(self) -> int|None:
         return self.raw.pqi if self.raw else None
 
     @property
-    def agc_word(self) -> Optional[int]:
+    def agc_word(self) -> int|None:
         return self.raw.agc_word if self.raw else None
 
 class BasicPacket:
     """Applies :class:`BasicPacketConfig` and streams decoded basic packets."""
 
-    def __init__(self, spirit: Spirit1Device, config: Optional[BasicPacketConfig] = None):
-        self.spirit = spirit
-        self.config = config or BasicPacketConfig()
+    def __init__(self, spirit: Spirit1Device, config: BasicPacketConfig|None = None):
+        self.spirit:Spirit1Device = spirit
+        self.config:BasicPacketConfig = config or BasicPacketConfig()
 
     def apply(self) -> bool:
         if self.config.validate():
@@ -90,7 +88,7 @@ class BasicPacket:
         filter_options = self.spirit.read_register(Spirit1Registers.PKTFLT_OPTS) & 0xCE
         if self.config.crc_mode != CrcMode.CRC_MODE_OFF:
             filter_options |= 0x01
-        self.spirit.write_registers(Spirit1Registers.PKTFLT_OPTS, filter_options)
+        _ = self.spirit.write_registers(Spirit1Registers.PKTFLT_OPTS, filter_options)
 
         packet_control = [
             (int(self.config.address_field) << 3) | self.config.control_length,
@@ -102,8 +100,8 @@ class BasicPacket:
             | (int(self.config.data_whitening) << 4)
             | int(self.config.fec),
         ]
-        self.spirit.write_registers(Spirit1Registers.PKTCTRL_4, *packet_control)
-        self.spirit.write_registers(Spirit1Registers.SYNC_4, *reversed(self.config.sync_words))
+        _ = self.spirit.write_registers(Spirit1Registers.PKTCTRL_4, *packet_control)
+        _ = self.spirit.write_registers(Spirit1Registers.SYNC_4, *reversed(self.config.sync_words))
         return True
 
     async def receive(self, receiver: Receiver) -> AsyncIterator[BasicPacketMessage]:
@@ -134,16 +132,16 @@ class BasicPacket:
         if self.config.address_field:
             if message.destination_address is None:
                 raise ValueError("Basic packet address field is enabled, but no destination was supplied")
-            self.spirit.write_registers(Spirit1Registers.RX_SOURCE_ADDR, message.destination_address)
+            _ = self.spirit.write_registers(Spirit1Registers.RX_SOURCE_ADDR, message.destination_address)
             if message.source_address is not None:
-                self.spirit.write_registers(Spirit1Registers.TX_SOURCE_ADDR, message.source_address)
+                _ = self.spirit.write_registers(Spirit1Registers.TX_SOURCE_ADDR, message.source_address)
         elif message.source_address is not None or message.destination_address is not None:
             raise ValueError("Packet addresses require address_field=True")
         self._write_control_data(message.control_data)
         self._set_payload_length(len(message.payload))
 
-        self.spirit.flush_tx_fifo()
-        self.spirit.write_linear_fifo(message.payload)
+        _ = self.spirit.flush_tx_fifo()
+        _ = self.spirit.write_linear_fifo(message.payload)
         if not self.spirit.start_tx():
             return False
         deadline = time.monotonic() + timeout
@@ -153,7 +151,7 @@ class BasicPacket:
             time.sleep(0.01)
         return True
 
-    def _decode_crc(self, raw_message: ReceivedMessage) -> Optional[bytes]:
+    def _decode_crc(self, raw_message: ReceivedMessage) -> bytes|None:
         if self.config.crc_mode == CrcMode.CRC_MODE_OFF:
             return None
         length = 3
@@ -169,16 +167,14 @@ class BasicPacket:
         if len(control_data) < self.config.control_length:
             raise ValueError("Not enough control-data bytes for the configured packet format")
         values = control_data[:self.config.control_length]
-        if any(not isinstance(value, int) or not 0 <= value <= 0xFF for value in values):
-            raise ValueError("Control data must contain byte values")
         register = Spirit1Registers.TX_CTRL_3 + (4 - self.config.control_length)
-        self.spirit.write_registers(register, *values)
+        _ = self.spirit.write_registers(register, *values)
 
     def _set_payload_length(self, payload_length: int) -> None:
         total_length = payload_length + self.config.control_length + (2 if self.config.address_field else 0)
         if not 0 <= total_length <= 0xFFFF:
             raise ValueError("Payload plus packet overhead must fit in 65535 bytes")
-        self.spirit.write_registers(
+        _ = self.spirit.write_registers(
             Spirit1Registers.PKTLEN_1,
             (total_length >> 8) & 0xFF,
             total_length & 0xFF,

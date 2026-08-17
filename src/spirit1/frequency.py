@@ -1,5 +1,6 @@
+from __future__ import annotations
+
 from enum import IntEnum
-from typing import List
 
 
 class FrequencyBand(IntEnum):
@@ -41,13 +42,11 @@ class Frequency:
             return True
         if 299000000 <= self.frequency <= 349100000:  # 300-348 Mhz
             return True
-        if 149000000 <= self.frequency <= 175100000:  # 150-175 Mhz
-            return True
-        return False
+        return 149000000 <= self.frequency <= 175100000
 
     def vco(self) -> VCOSetting:
-        """ Return the VCO. 
-            Use vco().value to get a numeric value suitable for use in registers. 
+        """ Return the VCO.
+            Use vco().value to get a numeric value suitable for use in registers.
         """
         if self.frequency_band == FrequencyBand.VERY_LOW_BAND:
             return VCOSetting.VCO_L if self.frequency < 161281250 else VCOSetting.VCO_H
@@ -82,6 +81,7 @@ class Frequency:
             return 3
         elif self.frequency_band == FrequencyBand.HIGH_BAND:
             return 1
+        raise RuntimeError("Invalid frequency band supplied.")
 
     @classmethod
     def frequency_band_from_reg(cls, reg:int) -> FrequencyBand:
@@ -102,18 +102,20 @@ class Frequency:
             return 3
         elif self.frequency_band == FrequencyBand.VERY_LOW_BAND:
             return 4
+        raise RuntimeError("Invalid power setting supplied")
 
-    def power_factors(self) -> List[float]:
+    def power_factors(self) -> list[float]:
         if self.frequency_band == FrequencyBand.HIGH_BAND:
             if self.frequency < 900000000:
-                return -2.04,23.45,-2.04,23.45,-1.95,27.66
-            return -2.11,25.66,-2.11,25.66,-2.00,31.28
+                return [-2.04,23.45,-2.04,23.45,-1.95,27.66]
+            return [-2.11,25.66,-2.11,25.66,-2.00,31.28]
         elif self.frequency_band == FrequencyBand.MIDDLE_BAND:
-            return [-3.48,38.45,-1.89,27.66,-1.92,30.23],   # 433
+            return [-3.48,38.45,-1.89,27.66,-1.92,30.23]   # 433
         elif self.frequency_band == FrequencyBand.LOW_BAND:
-            return [-3.27,35.43,-1.80,26.31,-1.89,29.61],   # 315
+            return [-3.27,35.43,-1.80,26.31,-1.89,29.61]   # 315
         elif self.frequency_band == FrequencyBand.VERY_LOW_BAND:
-            return [-4.18,50.66,-1.80,30.04,-1.86,32.22],   # 169
+            return [-4.18,50.66,-1.80,30.04,-1.86,32.22]   # 169
+        raise RuntimeError("Invalid frequency band supplied")
 
     def search_wcp(self) -> int:
         """ Returns the charge pump word for given VCO frequency. """
@@ -136,7 +138,7 @@ class Frequency:
                 i -= 1
         return i % 8
 
-    def synt_reg_values(self, digital_divider:bool, xtal:int) -> List[int]:
+    def synt_reg_values(self, digital_divider:bool, xtal:int) -> list[int]:
         div_factor = int(digital_divider) + 1
         synth_word = int(self.frequency * self.half_band_factor() * ((FBASE_DIVIDER * div_factor) / xtal))
         return [
@@ -167,4 +169,3 @@ class Frequency:
             return 12
         elif band == FrequencyBand.HIGH_BAND:
             return 6
-        return 6

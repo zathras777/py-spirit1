@@ -1,8 +1,8 @@
 """CSMA configuration."""
+from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Optional
 
 from .device import Spirit1Device
 from .registers import Spirit1Registers
@@ -45,7 +45,7 @@ class CSMAConfig:
     backoff_prescaler: int = 1
 
     def validate(self) -> list[str]:
-        errors = []
+        errors: list[str] = []
         if not 0 <= self.max_backoffs <= 7:
             errors.append("Maximum backoffs must be between 0 and 7")
         if not 0 <= self.backoff_counter_seed <= 0xFFFF:
@@ -58,9 +58,9 @@ class CSMAConfig:
 class CSMA:
     """Applies :class:`CSMAConfig` to the device."""
 
-    def __init__(self, spirit: Spirit1Device, config: Optional[CSMAConfig] = None):
-        self.spirit = spirit
-        self.config = config or CSMAConfig()
+    def __init__(self, spirit: Spirit1Device, config: CSMAConfig|None = None):
+        self.spirit: Spirit1Device = spirit
+        self.config: CSMAConfig = config or CSMAConfig()
 
     def apply(self) -> bool:
         if self.config.validate():
@@ -72,7 +72,7 @@ class CSMA:
             ((self.config.backoff_prescaler & 0x3F) << 2) | self.config.cca_period.value,
             self.config.cca_length.value | self.config.max_backoffs,
         ]
-        self.spirit.write_registers(Spirit1Registers.CSMA_CONFIG_3, *registers)
+        _ = self.spirit.write_registers(Spirit1Registers.CSMA_CONFIG_3, *registers)
         self.spirit.set_register_bit(Spirit1Registers.PROTOCOL_1, 2, self.config.persist)
         self.spirit.set_register_bit(Spirit1Registers.PROTOCOL_1, 1, self.config.enabled)
         return True

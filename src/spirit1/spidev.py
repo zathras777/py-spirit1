@@ -1,6 +1,6 @@
 """Optional convenience support for Linux's :mod:`spidev` package."""
 
-from typing import Optional
+from __future__ import annotations
 
 from .device import Spirit1Device
 from .gpio import ShutdownPin
@@ -11,7 +11,7 @@ def open_spidev(
     device: int = 0,
     speed_hz: int = 250_000,
     mode: int = 0b00,
-    sdn: Optional[ShutdownPin] = None,
+    sdn: ShutdownPin|None = None,
 ) -> Spirit1Device:
     """Open a Linux SPI device and return a configured :class:`Spirit1Device`.
 
@@ -29,7 +29,7 @@ def open_spidev(
         import spidev
     except ImportError as error:
         raise RuntimeError(
-            "open_spidev() requires the optional 'spidev' dependency; "
+            "open_spidev() requires the optional 'spidev' dependency; " +
             "install spirit1[hardware]"
         ) from error
 

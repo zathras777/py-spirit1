@@ -4,10 +4,11 @@ STack's automatic acknowledgement, retransmission, and sequence-number
 behaviour has not been verified against hardware in this project.  Treat this
 module as experimental until it has been exercised with compatible devices.
 """
+from __future__ import annotations
 
 import warnings
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Optional, Sequence
 
 from .device import Spirit1Device
 from .enums import CrcMode
@@ -45,17 +46,13 @@ class StackPacketConfig:
         return len(self.sync_words)
 
     def validate(self) -> list[str]:
-        errors = []
+        errors: list[str] = []
         if not 1 <= self.preamble_length <= 32:
             errors.append("Preamble length must be between 1 and 32 bytes")
         if not 1 <= self.sync_length <= 4:
             errors.append("Supply between 1 and 4 sync words")
-        if any(not isinstance(word, int) or not 0 <= word <= 0xFF for word in self.sync_words):
-            errors.append("Sync words must be byte values")
         if not 1 <= self.length_width <= 16:
             errors.append("Length width must be between 1 and 16 bits")
-        if not isinstance(self.crc_mode, CrcMode):
-            errors.append("CRC mode must be a CrcMode value")
         if not 0 <= self.control_length <= 4:
             errors.append("Control length must be between 0 and 4 bytes")
         if self.fixed_length and not 1 <= self.fixed_packet_length <= 0xFFFF:
@@ -68,14 +65,14 @@ class StackPacketMessage:
     """A received STack packet decoded from a :class:`ReceivedMessage`."""
 
     payload: bytes
-    source_address: Optional[int]
-    destination_address: Optional[int]
+    source_address: int|None
+    destination_address: int|None
     control_data: bytes = b""
-    crc: Optional[bytes] = None
-    raw: Optional[ReceivedMessage] = None
+    crc: bytes|None = None
+    raw: ReceivedMessage|None = None
 
     @property
-    def crc_valid(self) -> Optional[bool]:
+    def crc_valid(self) -> bool|None:
         return self.raw.crc_valid if self.raw else None
 
 
@@ -86,9 +83,9 @@ class StackPacket:
     be relied upon until verified with real STack devices.
     """
 
-    def __init__(self, spirit: Spirit1Device, config: Optional[StackPacketConfig] = None):
-        self.spirit = spirit
-        self.config = config or StackPacketConfig()
+    def __init__(self, spirit: Spirit1Device, config: StackPacketConfig|None = None):
+        self.spirit:Spirit1Device = spirit
+        self.config:StackPacketConfig = config or StackPacketConfig()
 
     def apply(self) -> bool:
         """Apply STack framing settings, warning that hardware validation is pending."""
@@ -103,8 +100,8 @@ class StackPacket:
         filter_options = self.spirit.read_register(Spirit1Registers.PKTFLT_OPTS) & 0xCE
         if self.config.crc_mode != CrcMode.CRC_MODE_OFF:
             filter_options |= 0x01
-        self.spirit.write_registers(Spirit1Registers.PKTFLT_OPTS, filter_options)
-        self.spirit.write_registers(
+        _ = self.spirit.write_registers(Spirit1Registers.PKTFLT_OPTS, filter_options)
+        _ = self.spirit.write_registers(
             Spirit1Registers.PKTCTRL_4,
             0x10 | self.config.control_length,  # ADDRESS_LEN = 2 for STack.
             0xC0 | (self.config.length_width - 1),  # PCKT_FRMT = STack.
@@ -115,7 +112,7 @@ class StackPacket:
             | (int(self.config.data_whitening) << 4)
             | int(self.config.fec),
         )
-        self.spirit.write_registers(Spirit1Registers.SYNC_4, *reversed(self.config.sync_words))
+        _ = self.spirit.write_registers(Spirit1Registers.SYNC_4, *reversed(self.config.sync_words))
         self.spirit.set_register_bit(Spirit1Registers.PROTOCOL_2, 3, self.config.no_ack)
         self.spirit.set_register_bit(Spirit1Registers.PROTOCOL_2, 2, self.config.auto_ack)
         return True
@@ -131,7 +128,7 @@ class StackPacket:
             raw=raw_message,
         )
 
-    def _decode_crc(self, raw_message: ReceivedMessage) -> Optional[bytes]:
+    def _decode_crc(self, raw_message: ReceivedMessage) -> bytes|None:
         if self.config.crc_mode == CrcMode.CRC_MODE_OFF:
             return None
         length = 3

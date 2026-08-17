@@ -1,13 +1,13 @@
+from __future__ import annotations
+
 import logging
 import math
 
-from typing import List, Optional
-
 from .device import Spirit1Device
 from .enums import Spirit1Modulation
-from .registers import Spirit1Registers
 from .frequency import Frequency
 from .radio_config import RadioConfig
+from .registers import Spirit1Registers
 
 logger = logging.getLogger(__name__)
 
@@ -21,9 +21,9 @@ DOUBLE_XTAL_THR = 30_000_000
 class Radio:
     """Applies a :class:`RadioConfig` to a SPIRIT1 device."""
 
-    def __init__(self, spirit: Spirit1Device, config: Optional[RadioConfig] = None):
-        self.spirit = spirit
-        self.config = config or RadioConfig()
+    def __init__(self, spirit: Spirit1Device, config: RadioConfig|None = None):
+        self.spirit: Spirit1Device = spirit
+        self.config: RadioConfig = config or RadioConfig()
 
     @property
     def xtal_frequency(self) -> int:
@@ -115,7 +115,7 @@ class Radio:
     def frequency_base(self, value: Frequency) -> None:
         self.config.frequency_base = value
 
-    def get_settings(self) -> dict:
+    def get_settings(self) -> dict[str, int]:
         return self.config.as_dict()
 
     def validate(self) -> bool:
@@ -143,7 +143,7 @@ class Radio:
         self.spirit.set_register_bit(Spirit1Registers.PM_CONFIG_2, 5, False)
         # Set the higher SEL_TSPLIT time.
         self.spirit.set_register_bit(Spirit1Registers.SYNTH_CONFIG_LO, 7, True)
-        # Enable DEM 
+        # Enable DEM
         self.spirit.set_register_bit(Spirit1Registers.DEM_CONFIG, 1, False)
 
         self.write_if_offsets()
@@ -157,7 +157,7 @@ class Radio:
 
         self.spirit.set_register_bit(Spirit1Registers.AFC_2, 7, True)
         # Set the IQC correction optimal values
-        self.spirit.write_registers(Spirit1Registers.IQC_1, 0x80, 0xE3)
+        _ = self.spirit.write_registers(Spirit1Registers.IQC_1, 0x80, 0xE3)
 
         self.write_frequency_base()
         return True
@@ -172,7 +172,7 @@ class Radio:
     def set_xtal_frequency(self, xtal: int) -> None:
         """Set the XTAL frequency and the corresponding divider state."""
         self.xtal_frequency = int(xtal)
-        self.set_digital_divider(self.xtal_frequency > DOUBLE_XTAL_THR)
+        _ = self.set_digital_divider(self.xtal_frequency > DOUBLE_XTAL_THR)
         analog_xtal = self.xtal_frequency
         if analog_xtal > DOUBLE_XTAL_THR:
             analog_xtal /= 2
@@ -195,7 +195,7 @@ class Radio:
             logger.warning("Unable to change to standby to set the digital divider flag")
             return False
         self.spirit.set_register_bit(Spirit1Registers.SYNTH_CONFIG_HI, 7, onoff)
-        self.spirit.ready()
+        _ = self.spirit.ready()
         self.digital_divider = onoff
         return True
 
@@ -207,7 +207,7 @@ class Radio:
         self.write_channel_number()
 
     def write_channel_number(self):
-        self.spirit.write_registers(Spirit1Registers.CHANNEL_NUMBER, self.channel_number)
+        _ = self.spirit.write_registers(Spirit1Registers.CHANNEL_NUMBER, self.channel_number)
 
     def get_channel_space(self):
         ch_space_factor = self.spirit.read_register(Spirit1Registers.CHANNEL_SPACE_FACTOR)
@@ -219,7 +219,7 @@ class Radio:
 
     def write_channel_space(self):
         ch_space_factor = math.floor((self.channel_space * CHSPACE_DIVIDER) / self.xtal_frequency) + 1
-        self.spirit.write_registers(Spirit1Registers.CHANNEL_SPACE_FACTOR, ch_space_factor)
+        _ = self.spirit.write_registers(Spirit1Registers.CHANNEL_SPACE_FACTOR, ch_space_factor)
 
     def get_frequency_offset(self):
         vals = self.spirit.read_register_block(Spirit1Registers.FC_OFFSET_HI, 2)
@@ -232,7 +232,7 @@ class Radio:
     def write_frequency_offset(self):
         factor = int((((self.frequency_offset * self.frequency_base.frequency) / PPM_FACTOR) * FBASE_DIVIDER) / self.xtal_frequency)
         self.spirit.update_register(Spirit1Registers.FC_OFFSET_HI, 0xF0, (factor >> 8) & 0x0F)
-        self.spirit.write_registers(Spirit1Registers.FC_OFFSET_LO, factor & 0xFF)
+        _ = self.spirit.write_registers(Spirit1Registers.FC_OFFSET_LO, factor & 0xFF)
 
     def get_synth_word(self) -> int:
         vals = self.spirit.read_register_block(Spirit1Registers.SYNT_3, 4)
@@ -261,11 +261,11 @@ class Radio:
 
     def write_if_offsets(self):
         if_off= (3.0 * 480140) / (self.xtal_frequency >> 12) - 64
-        self.spirit.write_registers(Spirit1Registers.IF_OFFSET_ANA, round(if_off))
-    
+        _ = self.spirit.write_registers(Spirit1Registers.IF_OFFSET_ANA, round(if_off))
+
         if self.xtal_frequency >= DOUBLE_XTAL_THR:
             if_off= (3.0 * 480140) / (self.xtal_frequency >> 13) - 64
-        self.spirit.write_registers(Spirit1Registers.IF_OFFSET_DIG, round(if_off))
+        _ = self.spirit.write_registers(Spirit1Registers.IF_OFFSET_DIG, round(if_off))
 
     def write_frequency_base(self, do_calibration:bool=True):
         """ Sets the synth word and the band select registers according to the
@@ -273,10 +273,9 @@ class Radio:
         """
         fc = self.frequency_base.offset(self.frequency_offset + self.channel_space * self.channel_number)
         self.spirit.update_register(Spirit1Registers.SYNTH_CONFIG_HI, 0xF9, fc.vco().value)
-        self.spirit.write_registers(Spirit1Registers.SYNT_3, *fc.synt_reg_values(self.reference_divider, self.xtal_frequency))
-  
-        if do_calibration:
-            if not self.vco_calibration():
+        _ = self.spirit.write_registers(Spirit1Registers.SYNT_3, *fc.synt_reg_values(self.reference_divider, self.xtal_frequency))
+
+        if do_calibration and not self.vco_calibration():
                 logger.warning("Unable to calibrate the base frequency %d", fc.frequency)
 
     def get_datarate(self):
@@ -399,7 +398,7 @@ class Radio:
 
         # Increase the VCO current
         self.spirit.write_registers(Spirit1Registers.VCO_CONFIG, 0x19)
-  
+
         self.enable_vco_calibration(True)
 
         self.spirit.refresh_status()
@@ -407,26 +406,26 @@ class Radio:
             c_standby = True
             if not self.spirit.ready():
                 return False
-        
+
         if not self.spirit.lock_tx():
             return False
-        
+
         vcoTx = self.get_vco_calibration_data()
 
         if not self.spirit.ready():
             return False
- 
+
         if not self.spirit.lock_rx():
             return False
-        
+
         vcoRx = self.get_vco_calibration_data()
 
         if not self.spirit.ready():
             return False
-  
+
         if c_standby:
             self.spirit.standby()
-        
+
         self.enable_vco_calibration(False)
 
         # Restore the VCO current
@@ -440,7 +439,7 @@ class Radio:
 
         self.set_vco_calibration_data_tx(vcoTx)
         self.set_vco_calibration_data_rx(vcoRx)
-  
+
         return True
 
     def enable_vco_calibration(self, onoff:bool):
@@ -492,7 +491,7 @@ class Radio:
 
     def get_dbm_2_reg(self, pwr:float) -> int:
         """ Returns the PA register value that corresponds to the passed dBm power. """
-        pwr_factors: List[float] = self.frequency_base.power_factors()
+        pwr_factors: list[float] = self.frequency_base.power_factors()
 
         if pwr > 0 and (13.0 / pwr_factors[2] - pwr_factors[3] / pwr_factors[2]) < pwr:
             reg = pwr_factors[0] * pwr + pwr_factors[1]

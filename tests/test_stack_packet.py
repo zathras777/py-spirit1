@@ -1,9 +1,12 @@
 import unittest
-import warnings
 
 from spirit1.enums import CrcMode
 from spirit1.receiver import ReceivedMessage
-from spirit1.stack_packet import ExperimentalStackPacketWarning, StackPacket, StackPacketConfig
+from spirit1.stack_packet import (
+    ExperimentalStackPacketWarning,
+    StackPacket,
+    StackPacketConfig,
+)
 
 
 class StackDevice:

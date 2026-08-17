@@ -1,7 +1,8 @@
 """Declarative configuration for a SPIRIT1 radio."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Optional
 
 from .enums import Spirit1Modulation
 from .frequency import Frequency
@@ -22,7 +23,7 @@ class RadioConfig:
     frequency_offset: int = 0
     # None preserves the divider configured in the device. Set a boolean to
     # explicitly override it during Radio.init_device().
-    reference_divider: Optional[bool] = None
+    reference_divider: bool|None = None
     digital_divider: bool = False
 
     @property
@@ -36,7 +37,7 @@ class RadioConfig:
 
     def validate(self) -> list[str]:
         """Return validation errors without touching the radio hardware."""
-        errors = []
+        errors: list[str] = []
         if self.xtal_frequency <= 0:
             errors.append("XTAL frequency must be greater than zero")
         if not 100 < self.datarate < 510_000:
@@ -51,11 +52,9 @@ class RadioConfig:
             errors.append("Frequency deviation must not be negative")
         if self.bandwidth <= 0:
             errors.append("Bandwidth must be greater than zero")
-        if not isinstance(self.modulation, Spirit1Modulation):
-            errors.append("Modulation must be a Spirit1Modulation value")
         return errors
 
-    def as_dict(self) -> dict:
+    def as_dict(self) -> dict[str, int]:
         """Return a serializable snapshot of user-facing radio settings."""
         return {
             "xtal_frequency": self.xtal_frequency,

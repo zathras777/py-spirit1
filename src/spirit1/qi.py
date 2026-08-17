@@ -1,7 +1,8 @@
 """Signal quality indicator configuration."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Optional
 
 from .device import Spirit1Device
 from .registers import Spirit1Registers
@@ -15,7 +16,7 @@ class QIConfig:
     pqi_enabled: bool = False
 
     def validate(self) -> list[str]:
-        errors = []
+        errors: list[str] = []
         if not 0 <= self.sqi_threshold <= 3:
             errors.append("SQI threshold must be between 0 and 3")
         if not 0 <= self.pqi_threshold <= 15:
@@ -26,9 +27,9 @@ class QIConfig:
 class QI:
     """Applies :class:`QIConfig` and reads received signal-quality values."""
 
-    def __init__(self, spirit: Spirit1Device, config: Optional[QIConfig] = None):
-        self.spirit = spirit
-        self.config = config or QIConfig()
+    def __init__(self, spirit: Spirit1Device, config: QIConfig|None = None):
+        self.spirit: Spirit1Device = spirit
+        self.config: QIConfig = config or QIConfig()
 
     def apply(self) -> bool:
         if self.config.validate():
@@ -39,7 +40,7 @@ class QI:
             | (int(self.config.sqi_enabled) << 1)
             | int(self.config.pqi_enabled)
         )
-        self.spirit.write_registers(Spirit1Registers.QI, value)
+        _ = self.spirit.write_registers(Spirit1Registers.QI, value)
         return True
 
     def sqi_value(self) -> int:

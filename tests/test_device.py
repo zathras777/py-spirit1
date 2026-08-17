@@ -1,5 +1,5 @@
 import unittest
-from typing import Sequence
+from collections.abc import Sequence
 
 from spirit1 import Spirit1Device
 from spirit1.enums import Spirit1Commands, Spirit1State

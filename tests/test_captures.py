@@ -1,13 +1,12 @@
 """Regression tests using messages captured from a real SPIRIT1 receiver."""
 
 import json
-from pathlib import Path
 import unittest
+from pathlib import Path
 
 from spirit1.basic_packet import BasicPacket, BasicPacketConfig
 from spirit1.enums import CrcMode
 from spirit1.receiver import ReceivedMessage
-
 
 CAPTURES = Path(__file__).parent / "fixtures" / "captures.jsonl"
 

@@ -1,5 +1,6 @@
 from enum import IntEnum
 
+
 class Spirit1Commands(IntEnum):
     TX                 = 0x60 # Start to transmit; valid only from READY
     RX                 = 0x61 # Start to receive; valid only from READY

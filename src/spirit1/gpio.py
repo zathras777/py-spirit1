@@ -1,23 +1,34 @@
 """Optional GPIO adapters for hardware signals outside the SPI bus."""
 
-from typing import Optional, Protocol
+from __future__ import annotations
+
+from typing import Protocol
 
 
 class ShutdownPin(Protocol):
     """Active-high SPIRIT1 SDN control pin."""
 
-    def get_value(self) -> bool:
+    def get_value(self) -> bool|None:
         """Return ``True`` when SDN is high and the radio is shut down."""
 
     def set_value(self, value: bool) -> None:
         """Drive SDN high (shutdown) or low (operate)."""
 
+class _OutputDevice(Protocol):
+    @property
+    def value(self) -> float: ...
+
+    @value.setter
+    def value(self, value: float) -> None: ...
+
+    def close(self) -> None: ...
+
 
 class GpioZeroShutdownPin:
     """Adapt a :class:`gpiozero.OutputDevice` to :class:`ShutdownPin`."""
 
-    def __init__(self, output_device) -> None:
-        self._output_device = output_device
+    def __init__(self, output_device: _OutputDevice) -> None:
+        self._output_device: _OutputDevice = output_device
 
     def get_value(self) -> bool:
         return bool(self._output_device.value)
@@ -29,7 +40,7 @@ class GpioZeroShutdownPin:
         self._output_device.close()
 
 
-def open_gpiozero_sdn(pin: int = 4, *, initial_value: Optional[bool] = None) -> GpioZeroShutdownPin:
+def open_gpiozero_sdn(pin: int = 4, *, initial_value: bool|None = None) -> GpioZeroShutdownPin:
     """Open an active-high SDN pin using optional :mod:`gpiozero` support.
 
     The default ``initial_value=None`` preserves the existing pin state rather
@@ -39,7 +50,7 @@ def open_gpiozero_sdn(pin: int = 4, *, initial_value: Optional[bool] = None) -> 
         from gpiozero import OutputDevice
     except ImportError as error:
         raise RuntimeError(
-            "open_gpiozero_sdn() requires the optional 'gpiozero' dependency; "
+            "open_gpiozero_sdn() requires the optional 'gpiozero' dependency; " +
             "install spirit1[gpio]"
         ) from error
     return GpioZeroShutdownPin(

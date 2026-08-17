@@ -1,8 +1,9 @@
 """Interrupt definitions, configuration, and status access."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 from .device import Spirit1Device
 from .registers import Spirit1Registers
@@ -54,14 +55,14 @@ class IRQConfig:
 class IRQ:
     """Applies :class:`IRQConfig` and reads interrupt status."""
 
-    def __init__(self, spirit: Spirit1Device, config: Optional[IRQConfig] = None):
-        self.spirit = spirit
-        self.config = config or IRQConfig()
+    def __init__(self, spirit: Spirit1Device, config: IRQConfig|None = None):
+        self.spirit: Spirit1Device = spirit
+        self.config: IRQConfig = config or IRQConfig()
 
     def apply(self) -> None:
         mask = self.config.mask
         values = [(mask >> (8 * index)) & 0xFF for index in range(3, -1, -1)]
-        self.spirit.write_registers(Spirit1Registers.IRQ_MASK_3, *values)
+        _ = self.spirit.write_registers(Spirit1Registers.IRQ_MASK_3, *values)
 
     def get_status(self) -> int:
         status = self.spirit.read_register_block(

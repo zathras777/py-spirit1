@@ -1,6 +1,6 @@
 import unittest
 
-from spirit1.csma import CCALength, CCAPeriod, CSMA, CSMAConfig
+from spirit1.csma import CSMA, CCALength, CCAPeriod, CSMAConfig
 from spirit1.irq import IRQ, IRQConfig, SpiritIrq
 from spirit1.qi import QI, QIConfig
 from spirit1.timer import Timer, TimerConfig

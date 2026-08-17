@@ -1,33 +1,33 @@
+from __future__ import annotations
+
 import logging
 import time
+from typing import AnyStr
 
-from typing import AnyStr, Optional, Union
-
-from .gpio import ShutdownPin
-from .status import Spirit1Status
 from .enums import Spirit1Commands, Spirit1State
+from .gpio import ShutdownPin
 from .registers import Spirit1Registers
 from .spi import SpiDevice
-
+from .status import Spirit1Status
 
 logger = logging.getLogger(__name__)
 
-Register = Union[Spirit1Registers, int]
+Register = Spirit1Registers | int
 
 
 class Spirit1Device:
     """Low-level SPIRIT1 device driver backed by an SPI transport."""
 
-    def __init__(self, spi: SpiDevice, sdn: Optional[ShutdownPin] = None):
-        self._spi = spi
-        self._sdn = sdn
+    def __init__(self, spi: SpiDevice, sdn: ShutdownPin|None = None):
+        self._spi: SpiDevice = spi
+        self._sdn: ShutdownPin|None = sdn
         self.is_closed:bool = False
         self.debug_spi:bool = False
         self.debug_spi_tx:bool = False
         self.status: Spirit1Status = Spirit1Status()
 
         if self.check_communication() and self.status.state == Spirit1State.LOCKWON:
-            self.reset()
+            _ = self.reset()
 
     def close(self) -> None:
         """Close an owned SPI transport when it provides a ``close`` method."""
@@ -36,7 +36,7 @@ class Spirit1Device:
         self.is_closed = True
         close = getattr(self._spi, "close", None)
         if callable(close):
-            close()
+            _ = close()
 
     def is_shutdown(self) -> bool:
         """Return whether the optional active-high SDN pin is asserted."""
@@ -110,7 +110,7 @@ class Spirit1Device:
         return self._change_state(Spirit1Commands.SABORT, Spirit1State.READY)
 
     def refresh_status(self) -> bool:
-        self._spi_xfer(0x01, 0xC0, 0xC1)
+        _ = self._spi_xfer(0x01, 0xC0, 0xC1)
         return self.status.is_valid
 
     # SPI I/O
@@ -136,7 +136,7 @@ class Spirit1Device:
         if not 0x5F < cmd.value < 0x73 and cmd.value not in [0x6E, 0x6F]:
             logger.error(f"Invalid command: {cmd.value:02x}. Must be between 0x60 and 0x72, but not 0x6E or 0x6F.")
             return
-        self._spi_xfer(0x80, cmd.value)
+        _ = self._spi_xfer(0x80, cmd.value)
 
     def get_register_bit(self, register: Register, bit: int) -> bool:
         return (self.read_register(register) & (1 << bit)) == (1 << bit)
@@ -144,12 +144,12 @@ class Spirit1Device:
     def set_register_bit(self, register: Register, bit: int, onoff: bool) -> None:
         value = self.read_register(register)
         value = (value & (0xFF - (1 << bit))) + (onoff << bit)
-        self.write_registers(register, value)
+        _ = self.write_registers(register, value)
 
     def update_register(self, register: Register, mask: int, add: int) -> None:
         val = self.read_register(register)
         val = (val & mask) + add
-        self.write_registers(register, val)
+        _ = self.write_registers(register, val)
 
     # Linear FIFO access
     def read_linear_fifo(self, nbytes:int) -> bytearray:
@@ -183,7 +183,7 @@ class Spirit1Device:
         if self.debug_spi:
             rc = "SPI <<< " + " ".join([f"{x:02x}" for x in vals])
             logger.debug(rc)
-        self.status.update(vals)
+        _ = self.status.update(vals)
         return bytearray(vals[2:])
 
 
@@ -210,7 +210,7 @@ class Spirit1Device:
                 return False
 
             time.sleep(0.001)  # 1 ms
-            self.refresh_status()
+            _ = self.refresh_status()
 
         return True
 

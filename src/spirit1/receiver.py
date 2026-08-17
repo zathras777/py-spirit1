@@ -1,10 +1,12 @@
 """Raw packet reception."""
 
+from __future__ import annotations
+
 import asyncio
 import errno
 import logging
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import AsyncIterator, Optional
 
 from .device import Spirit1Device
 from .irq import IRQ, SpiritIrq
@@ -18,13 +20,13 @@ class ReceivedMessage:
     """RX FIFO bytes and the packet-status snapshot reported by SPIRIT1."""
 
     payload: bytearray = field(default_factory=bytearray)
-    crc_valid: Optional[bool] = None
-    rssi: Optional[int] = None
-    sqi: Optional[int] = None
-    pqi: Optional[int] = None
-    agc_word: Optional[int] = None
-    source_address: Optional[int] = None
-    destination_address: Optional[int] = None
+    crc_valid: bool|None = None
+    rssi: int|None = None
+    sqi: int|None = None
+    pqi: int|None = None
+    agc_word: int|None = None
+    source_address: int|None = None
+    destination_address: int|None = None
     control_data: bytes = b""
     crc: bytes = b""
 
@@ -56,12 +58,12 @@ class Receiver:
     ):
         if poll_interval < 0:
             raise ValueError("Poll interval must not be negative")
-        self.spirit = spirit
-        self.irq = irq
-        self.poll_interval = poll_interval
-        self.ignore_invalid_crc = ignore_invalid_crc
-        self.should_run = True
-        self.debug = False
+        self.spirit: Spirit1Device = spirit
+        self.irq: IRQ = irq
+        self.poll_interval: float = poll_interval
+        self.ignore_invalid_crc: bool = ignore_invalid_crc
+        self.should_run: bool = True
+        self.debug: bool = False
 
     def get_persistent_rx(self) -> bool:
         return self.spirit.get_register_bit(Spirit1Registers.PROTOCOL_0, 1)
@@ -74,7 +76,7 @@ class Receiver:
         if not self.should_run:
             return
         self.should_run = False
-        self.spirit.sabort()
+        _ = self.spirit.sabort()
 
     async def receive(self) -> AsyncIterator[ReceivedMessage]:
         buffer = bytearray()
@@ -109,16 +111,16 @@ class Receiver:
                         logger.debug("Discarding received message with an invalid CRC")
                     buffer = bytearray()
                     if self.should_run:
-                        self.spirit.sabort()
-                        self.spirit.flush_rx_fifo()
-                        self.spirit.start_rx()
+                        _ = self.spirit.sabort()
+                        _ = self.spirit.flush_rx_fifo()
+                        _ = self.spirit.start_rx()
 
                 await asyncio.sleep(self.poll_interval)
         finally:
             if self.should_run:
                 self.should_run = False
                 try:
-                    self.spirit.sabort()
+                    _ = self.spirit.sabort()
                 except OSError as error:
                     # An owning application may close SPI while asyncio is
                     # finalising this generator during shutdown.

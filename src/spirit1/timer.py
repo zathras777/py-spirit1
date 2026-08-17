@@ -3,8 +3,8 @@
 from dataclasses import dataclass
 
 from .device import Spirit1Device
-from .registers import Spirit1Registers
 from .radio import DOUBLE_XTAL_THR
+from .registers import Spirit1Registers
 
 
 @dataclass

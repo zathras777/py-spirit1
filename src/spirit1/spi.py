@@ -1,6 +1,7 @@
 """Type contract for SPI transports supported by :class:`Spirit1Device`."""
 
-from typing import Protocol, Sequence
+from collections.abc import Sequence
+from typing import Protocol
 
 
 class SpiDevice(Protocol):

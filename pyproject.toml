@@ -19,7 +19,7 @@ classifiers = [
 [project.optional-dependencies]
 hardware = ["spidev"]
 gpio = ["gpiozero", "lgpio; sys_platform == 'linux'"]
-raspberry-pi = ["spidev", "gpiozero"]
+raspberry-pi = ["spidev", "gpiozero", "lgpio"]
 
 [project.urls]
 Homepage = "https://github.com/zathras777/py-spirit1"

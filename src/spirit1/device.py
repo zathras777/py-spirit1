@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import AnyStr
+from typing import AnyStr, Union
 
 from .enums import Spirit1Commands, Spirit1State
 from .gpio import ShutdownPin
@@ -12,7 +12,9 @@ from .status import Spirit1Status
 
 logger = logging.getLogger(__name__)
 
-Register = Spirit1Registers | int
+# Keep this alias compatible with Python 3.9, which is still supported by the
+# package.  ``Spirit1Registers | int`` is only evaluated successfully on 3.10+.
+Register = Union[Spirit1Registers, int]
 
 
 class Spirit1Device:
@@ -38,7 +40,7 @@ class Spirit1Device:
         if callable(close):
             _ = close()
 
-    def is_shutdown(self) -> bool:
+    def is_shutdown(self) -> bool|None:
         """Return whether the optional active-high SDN pin is asserted."""
         return self._sdn is not None and self._sdn.get_value()
 

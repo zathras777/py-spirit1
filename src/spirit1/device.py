@@ -1,8 +1,9 @@
 import logging
 import time
 
-from typing import AnyStr, Union
+from typing import AnyStr, Optional, Union
 
+from .gpio import ShutdownPin
 from .status import Spirit1Status
 from .enums import Spirit1Commands, Spirit1State
 from .registers import Spirit1Registers
@@ -17,25 +18,58 @@ Register = Union[Spirit1Registers, int]
 class Spirit1Device:
     """Low-level SPIRIT1 device driver backed by an SPI transport."""
 
-    def __init__(self, spi: SpiDevice):
+    def __init__(self, spi: SpiDevice, sdn: Optional[ShutdownPin] = None):
         self._spi = spi
-        self.is_shutdown:bool = False
+        self._sdn = sdn
+        self.is_closed:bool = False
         self.debug_spi:bool = False
         self.debug_spi_tx:bool = False
         self.status: Spirit1Status = Spirit1Status()
 
-        self.refresh_status()
-        if self.status.state == Spirit1State.LOCKWON:
+        if self.check_communication() and self.status.state == Spirit1State.LOCKWON:
             self.reset()
 
     def close(self) -> None:
         """Close an owned SPI transport when it provides a ``close`` method."""
-        if self.is_shutdown:
+        if self.is_closed:
             return
-        self.is_shutdown = True
+        self.is_closed = True
         close = getattr(self._spi, "close", None)
         if callable(close):
             close()
+
+    def is_shutdown(self) -> bool:
+        """Return whether the optional active-high SDN pin is asserted."""
+        return self._sdn is not None and self._sdn.get_value()
+
+    def shutdown(self) -> None:
+        """Assert SDN, fully powering down SPIRIT1 and losing configuration."""
+        self._require_sdn().set_value(True)
+
+    def wake(self, startup_delay: float = 0.001) -> bool:
+        """Deassert SDN, wait for startup, and verify that SPI responds."""
+        if startup_delay < 0:
+            raise ValueError("Startup delay must not be negative")
+        self._require_sdn().set_value(False)
+        time.sleep(startup_delay)
+        return self.check_communication()
+
+    def hardware_reset(self, shutdown_delay: float = 0.001, startup_delay: float = 0.001) -> bool:
+        """Pulse SDN high then low, resetting hardware and erasing configuration."""
+        if shutdown_delay < 0 or startup_delay < 0:
+            raise ValueError("Reset delays must not be negative")
+        self.shutdown()
+        time.sleep(shutdown_delay)
+        return self.wake(startup_delay)
+
+    def check_communication(self) -> bool:
+        """Perform a read-only status transaction without waking a shut-down radio."""
+        if self.is_shutdown():
+            return False
+        try:
+            return self.refresh_status()
+        except (OSError, IndexError, ValueError):
+            return False
 
     # State Functions
     def reset(self) -> bool:
@@ -56,6 +90,10 @@ class Spirit1Device:
     def ready(self) -> bool:
         return self._change_state(Spirit1Commands.READY, Spirit1State.READY)
 
+    def sleep(self) -> bool:
+        """Enter the low-power sleep state without losing configuration."""
+        return self._change_state(Spirit1Commands.SLEEP, Spirit1State.SLEEP)
+
     def flush_rx_fifo(self) -> bool:
         return self._change_state(Spirit1Commands.FLUSHRXFIFO, Spirit1State.READY)
 
@@ -71,8 +109,9 @@ class Spirit1Device:
     def sabort(self) -> bool:
         return self._change_state(Spirit1Commands.SABORT, Spirit1State.READY)
 
-    def refresh_status(self):
+    def refresh_status(self) -> bool:
         self._spi_xfer(0x01, 0xC0, 0xC1)
+        return self.status.is_valid
 
     # SPI I/O
     def read_register(self, register: Register) -> int:
@@ -134,7 +173,7 @@ class Spirit1Device:
 
     # Internal functions...
     def _spi_xfer(self, *args:int) -> bytearray:
-        if self.is_shutdown:
+        if self.is_closed:
             logger.warning("Device is closed.")
             return bytearray()
         if self.debug_spi or (args[0] == 0x00 and self.debug_spi_tx):
@@ -174,3 +213,8 @@ class Spirit1Device:
             self.refresh_status()
 
         return True
+
+    def _require_sdn(self) -> ShutdownPin:
+        if self._sdn is None:
+            raise RuntimeError("SDN control is not configured for this device")
+        return self._sdn

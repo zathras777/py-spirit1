@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build and publish a tagged GitHub release from already-staged source changes.
+# Build and publish a tagged GitHub release from staged changes or current HEAD.
 
 set -euo pipefail
 
@@ -18,10 +18,10 @@ package_version="$(sed -nE 's/^__version__ = "([^"]+)"/\1/p' src/spirit1/__init_
 [[ "$package_version" == "$version" ]] || die "src/spirit1/__init__.py has version $package_version, not $version"
 
 git diff --quiet || die "stage or discard unstaged changes before releasing"
-git diff --cached --quiet && die "no staged changes to release"
-for version_file in pyproject.toml src/spirit1/__init__.py; do
-    git diff --cached --name-only -- "$version_file" | grep -q . || die "$version_file must be staged"
-done
+commit_staged=false
+if ! git diff --cached --quiet; then
+    commit_staged=true
+fi
 
 tag="v$version"
 git rev-parse -q --verify "refs/tags/$tag" >/dev/null && die "tag $tag already exists"
@@ -32,7 +32,12 @@ if [[ -d dist ]] && find dist -type f -print -quit | grep -q .; then
     die "dist/ contains existing artifacts; remove or archive them before releasing"
 fi
 
-echo "This will test, commit the staged changes, tag $tag, push to origin, and create a GitHub release."
+if $commit_staged; then
+    release_action="commit the staged changes, tag"
+else
+    release_action="tag the current HEAD (no new commit)"
+fi
+echo "This will test, $release_action $tag, push to origin, and create a GitHub release."
 read -r -p "Continue? [y/N] " answer
 [[ "$answer" =~ ^[Yy]$ ]] || exit 0
 
@@ -41,7 +46,9 @@ rm -rf build src/spirit1.egg-info
 python -m build
 python -m twine check --strict dist/*
 
-git commit -m "Release $version"
+if $commit_staged; then
+    git commit -m "Release $version"
+fi
 git tag -a "$tag" -m "Release $version"
 git push origin HEAD
 git push origin "$tag"
